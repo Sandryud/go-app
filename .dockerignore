@@ -1,0 +1,63 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Documentation
+README.md
+*.md
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Build artifacts
+bin/
+dist/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+
+# Test files
+tests/
+*_test.go
+coverage.out
+coverage.html
+
+# Docker
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Scripts
+scripts/
+Makefile
+
+# Migrations (если не нужны в образе)
+migrations/
+
+# API docs
+api/
+
+# Logs
+*.log
+
+# Go workspace
+go.work
+vendor/
+

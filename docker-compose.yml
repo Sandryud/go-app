@@ -1,0 +1,59 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: workout-app-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+      POSTGRES_DB: ${DB_NAME:-workout_app}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-workout_app}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - workout-network
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: workout-app-server
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      SERVER_HOST: ${SERVER_HOST:-0.0.0.0}
+      SERVER_PORT: ${SERVER_PORT:-8080}
+      DB_HOST: postgres
+      DB_PORT: ${DB_PORT:-5432}
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      DB_NAME: ${DB_NAME:-workout_app}
+      DB_SSLMODE: ${DB_SSLMODE:-disable}
+      APP_ENV: ${APP_ENV:-development}
+    ports:
+      - "${SERVER_PORT:-8080}:8080"
+    networks:
+      - workout-network
+    volumes:
+      # Монтируем .env файл если нужно (для разработки)
+      - ./.env:/app/.env:ro
+
+networks:
+  workout-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+    driver: local
+
