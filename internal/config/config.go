@@ -3,6 +3,8 @@ package config
 import (
 	"fmt"
 	"os"
+	"strconv"
+	"time"
 
 	"github.com/joho/godotenv"
 )
@@ -11,6 +13,7 @@ import (
 type Config struct {
 	Server   ServerConfig
 	Database DatabaseConfig
+	AppEnv   string // Окружение приложения: development, production, etc.
 }
 
 // ServerConfig хранит конфигурацию сервера
@@ -21,12 +24,16 @@ type ServerConfig struct {
 
 // DatabaseConfig хранит конфигурацию базы данных
 type DatabaseConfig struct {
-	Host     string
-	Port     string
-	User     string
-	Password string
-	DBName   string
-	SSLMode  string
+	Host            string
+	Port            string
+	User            string
+	Password        string
+	DBName          string
+	SSLMode         string
+	MaxOpenConns    int           // Максимальное количество открытых соединений
+	MaxIdleConns    int           // Максимальное количество неактивных соединений
+	ConnMaxLifetime time.Duration // Максимальное время жизни соединения
+	ConnMaxIdleTime time.Duration // Максимальное время простоя соединения
 }
 
 // DSN возвращает строку подключения к базе данных
@@ -59,6 +66,15 @@ func Load() (*Config, error) {
 	cfg.Database.Password = getEnv("DB_PASSWORD", "")
 	cfg.Database.DBName = getEnv("DB_NAME", "workout_app")
 	cfg.Database.SSLMode = getEnv("DB_SSLMODE", "disable")
+
+	// Загружаем настройки пула соединений
+	cfg.Database.MaxOpenConns = getEnvAsInt("DB_MAX_OPEN_CONNS", 25)
+	cfg.Database.MaxIdleConns = getEnvAsInt("DB_MAX_IDLE_CONNS", 5)
+	cfg.Database.ConnMaxLifetime = getEnvAsDuration("DB_CONN_MAX_LIFETIME", 5*time.Minute)
+	cfg.Database.ConnMaxIdleTime = getEnvAsDuration("DB_CONN_MAX_IDLE_TIME", 10*time.Minute)
+
+	// Загружаем окружение приложения
+	cfg.AppEnv = getEnv("APP_ENV", "development")
 
 	// Валидируем конфигурацию
 	if err := cfg.Validate(); err != nil {
@@ -95,4 +111,30 @@ func getEnv(key, defaultValue string) string {
 		return defaultValue
 	}
 	return value
+}
+
+// getEnvAsInt получает переменную окружения как int или возвращает значение по умолчанию
+func getEnvAsInt(key string, defaultValue int) int {
+	value := os.Getenv(key)
+	if value == "" {
+		return defaultValue
+	}
+	intValue, err := strconv.Atoi(value)
+	if err != nil {
+		return defaultValue
+	}
+	return intValue
+}
+
+// getEnvAsDuration получает переменную окружения как time.Duration или возвращает значение по умолчанию
+func getEnvAsDuration(key string, defaultValue time.Duration) time.Duration {
+	value := os.Getenv(key)
+	if value == "" {
+		return defaultValue
+	}
+	duration, err := time.ParseDuration(value)
+	if err != nil {
+		return defaultValue
+	}
+	return duration
 }
