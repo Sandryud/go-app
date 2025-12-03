@@ -55,6 +55,17 @@ services:
       # Монтируем .env файл если нужно (для разработки)
       - ./.env:/app/.env:ro
 
+  adminer:
+    image: adminer
+    container_name: workout-app-adminer
+    restart: unless-stopped
+    environment:
+      ADMINER_DEFAULT_SERVER: postgres
+    ports:
+      - "8082:8080"
+    networks:
+      - workout-network
+
 networks:
   workout-network:
     driver: bridge
