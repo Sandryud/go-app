@@ -225,6 +225,61 @@ func (h *Handler) DeleteMe(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
+// GetByID godoc
+// @Summary      Получить публичный профиль пользователя по ID
+// @Description  Возвращает публичный профиль пользователя по идентификатору. Доступно любому аутентифицированному пользователю.
+// @Tags         user
+// @Security     BearerAuth
+// @Produce      json
+// @Param        id   path      string  true  "ID пользователя (UUID)"
+// @Success      200  {object}  PublicProfileResponse
+// @Failure      400  {object}  response.ErrorBody
+// @Failure      401  {object}  response.ErrorBody
+// @Failure      404  {object}  response.ErrorBody
+// @Failure      500  {object}  response.ErrorBody
+// @Router       /api/v1/users/{id} [get]
+func (h *Handler) GetByID(c *gin.Context) {
+	idStr := c.Param("id")
+	if idStr == "" {
+		response.Error(c, http.StatusBadRequest, "invalid_request", "ID пользователя обязателен", nil)
+		return
+	}
+
+	userID, err := uuid.Parse(idStr)
+	if err != nil {
+		h.logger.Info("invalid_user_id_format", map[string]any{
+			"id":     idStr,
+			"path":   c.Request.URL.Path,
+			"method": c.Request.Method,
+		})
+		response.Error(c, http.StatusBadRequest, "invalid_request", "Некорректный формат ID пользователя", nil)
+		return
+	}
+
+	user, err := h.users.GetByID(c.Request.Context(), userID)
+	if err != nil {
+		if errors.Is(err, repo.ErrNotFound) {
+			h.logger.Info("user_not_found_in_get_by_id", map[string]any{
+				"user_id": userID.String(),
+				"path":    c.Request.URL.Path,
+				"method":  c.Request.Method,
+			})
+			response.Error(c, http.StatusNotFound, "user_not_found", "Пользователь не найден", nil)
+			return
+		}
+		h.logger.Error("internal_error_in_get_by_id", map[string]any{
+			"user_id": userID.String(),
+			"path":    c.Request.URL.Path,
+			"method":  c.Request.Method,
+			"error":   err.Error(),
+		})
+		response.Error(c, http.StatusInternalServerError, "internal_error", "Внутренняя ошибка сервера", nil)
+		return
+	}
+
+	c.JSON(http.StatusOK, toPublicProfileResponse(user))
+}
+
 // ListUsers godoc
 // @Summary      Получить список всех пользователей (админ)
 // @Description  Возвращает список всех активных пользователей. Доступно только для роли admin.
@@ -261,6 +316,23 @@ func toProfileResponse(u *domain.User) ProfileResponse {
 	return ProfileResponse{
 		ID:            u.ID.String(),
 		Email:         u.Email,
+		Username:      u.Username,
+		FirstName:     u.FirstName,
+		LastName:      u.LastName,
+		BirthDate:     u.BirthDate,
+		Gender:        u.Gender,
+		AvatarURL:     u.AvatarURL,
+		Role:          string(u.Role),
+		TrainingLevel: string(u.TrainingLevel),
+		CreatedAt:     u.CreatedAt,
+		UpdatedAt:     u.UpdatedAt,
+	}
+}
+
+// toPublicProfileResponse маппит доменную модель в публичный DTO (без email).
+func toPublicProfileResponse(u *domain.User) PublicProfileResponse {
+	return PublicProfileResponse{
+		ID:            u.ID.String(),
 		Username:      u.Username,
 		FirstName:     u.FirstName,
 		LastName:      u.LastName,

@@ -32,4 +32,20 @@ type ProfileUpdateRequest struct {
 	TrainingLevel *string `json:"training_level,omitempty"`
 }
 
+// PublicProfileResponse описывает публичный профиль пользователя.
+// Используется в эндпоинтах, где не требуется отображать приватную информацию (например, email).
+type PublicProfileResponse struct {
+	ID            string     `json:"id"`
+	Username      string     `json:"username"`
+	FirstName     string     `json:"first_name,omitempty"`
+	LastName      string     `json:"last_name,omitempty"`
+	BirthDate     *time.Time `json:"birth_date,omitempty"`
+	Gender        string     `json:"gender,omitempty"`
+	AvatarURL     string     `json:"avatar_url,omitempty"`
+	Role          string     `json:"role,omitempty"`
+	TrainingLevel string     `json:"training_level,omitempty"`
+	CreatedAt     time.Time  `json:"created_at"`
+	UpdatedAt     time.Time  `json:"updated_at"`
+}
+
 

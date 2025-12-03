@@ -141,6 +141,8 @@ func (s *Server) setupUserRoutes() {
 		userGroup.PUT("/me", s.userHandler.UpdateMe)
 		// DELETE /api/v1/users/me — мягко удалить (деактивировать) аккаунт текущего пользователя.
 		userGroup.DELETE("/me", s.userHandler.DeleteMe)
+		// GET /api/v1/users/:id — получить публичный профиль пользователя по ID.
+		userGroup.GET("/:id", s.userHandler.GetByID)
 	}
 
 	// Админские роуты
