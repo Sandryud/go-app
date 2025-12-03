@@ -14,8 +14,13 @@ import (
 
 	"workout-app/internal/config"
 	"workout-app/internal/database"
+	authhandler "workout-app/internal/handler/auth"
 	"workout-app/internal/handler/health"
 	"workout-app/internal/handler/middleware"
+	userhandler "workout-app/internal/handler/user"
+	pgrepo "workout-app/internal/repository/postgres"
+	useruc "workout-app/internal/usecase/user"
+	jwtsvc "workout-app/pkg/jwt"
 )
 
 // Server представляет HTTP сервер приложения
@@ -24,6 +29,10 @@ type Server struct {
 	httpServer *http.Server
 	db         *database.DB
 	cfg        *config.Config
+
+	jwtService  jwtsvc.Service
+	authHandler *authhandler.Handler
+	userHandler *userhandler.Handler
 }
 
 // NewServer создает новый экземпляр сервера
@@ -42,6 +51,14 @@ func NewServer(cfg *config.Config, db *database.DB) *Server {
 		db:     db,
 		cfg:    cfg,
 	}
+
+	// Инициализируем зависимости домена пользователя и аутентификации один раз
+	gormDB := db.DB
+	userRepo := pgrepo.NewUserRepository(gormDB)
+	userService := useruc.NewService(userRepo)
+	s.jwtService = jwtsvc.NewService(&cfg.JWT)
+	s.authHandler = authhandler.NewHandler(userService, userRepo, s.jwtService)
+	s.userHandler = userhandler.NewHandler(userService)
 
 	// Настраиваем middleware и роуты
 	s.setupMiddleware()
@@ -64,22 +81,56 @@ func (s *Server) setupMiddleware() {
 
 // setupRoutes настраивает маршруты приложения
 func (s *Server) setupRoutes() {
-	// Health check endpoints
-	healthHandler := health.NewHandler(s.db, s.cfg.AppEnv)
-	s.router.GET("/health", healthHandler.Health)
-	s.router.GET("/health/db", healthHandler.HealthDB)
+	s.setupHealthRoutes()
+	s.setupAuthRoutes()
+	s.setupUserRoutes()
+}
 
-	// API v1 группа
+// setupHealthRoutes настраивает health-check эндпоинты.
+func (s *Server) setupHealthRoutes() {
+	healthHandler := health.NewHandler(s.db, s.cfg.AppEnv)
+	// GET /health — базовый health-check сервера (жив ли процесс).
+	s.router.GET("/health", healthHandler.Health)
+	// GET /health/db — проверка доступности базы данных.
+	s.router.GET("/health/db", healthHandler.HealthDB)
+}
+
+// setupAuthRoutes настраивает эндпоинты аутентификации и корневой роут API.
+func (s *Server) setupAuthRoutes() {
 	v1 := s.router.Group("/api/v1")
-	{
-		// Здесь будут добавлены роуты для различных доменов
-		// Например: v1.GET("/users", userHandler.GetUsers)
-		v1.GET("/", func(c *gin.Context) {
-			c.JSON(http.StatusOK, gin.H{
-				"message": "Workout App API v1",
-				"version": "1.0.0",
-			})
+
+	// GET /api/v1/ — корневой эндпоинт API v1, возвращает версию и базовую информацию.
+	v1.GET("/", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{
+			"message": "Workout App API v1",
+			"version": "1.0.0",
 		})
+	})
+
+	authGroup := v1.Group("/auth")
+	{
+		// POST /api/v1/auth/register — регистрация нового пользователя по email/паролю/username.
+		authGroup.POST("/register", s.authHandler.Register)
+		// POST /api/v1/auth/login — аутентификация пользователя по email/паролю.
+		authGroup.POST("/login", s.authHandler.Login)
+		// POST /api/v1/auth/refresh — обновление пары access/refresh токенов по refresh-токену.
+		authGroup.POST("/refresh", s.authHandler.Refresh)
+	}
+}
+
+// setupUserRoutes настраивает защищённые эндпоинты пользователя.
+func (s *Server) setupUserRoutes() {
+	v1 := s.router.Group("/api/v1")
+
+	userGroup := v1.Group("/users")
+	userGroup.Use(middleware.Auth(s.jwtService))
+	{
+		// GET /api/v1/users/me — получить профиль текущего аутентифицированного пользователя.
+		userGroup.GET("/me", s.userHandler.GetMe)
+		// PUT /api/v1/users/me — обновить профиль текущего пользователя.
+		userGroup.PUT("/me", s.userHandler.UpdateMe)
+		// DELETE /api/v1/users/me — мягко удалить (деактивировать) аккаунт текущего пользователя.
+		userGroup.DELETE("/me", s.userHandler.DeleteMe)
 	}
 }
 

@@ -9,7 +9,7 @@ type RegisterRequest struct {
 }
 
 // LoginRequest описывает тело запроса логина.
-type LoginRequest struct struct {
+type LoginRequest struct {
 	Email    string `json:"email" binding:"required,email"`
 	Password string `json:"password" binding:"required"`
 }
