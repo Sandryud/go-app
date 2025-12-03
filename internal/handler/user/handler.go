@@ -45,7 +45,17 @@ func getUserIDFromContext(c *gin.Context) (uuid.UUID, error) {
 	return id, nil
 }
 
-// GetMe возвращает профиль текущего пользователя.
+// GetMe godoc
+// @Summary      Получить профиль текущего пользователя
+// @Description  Возвращает профиль пользователя, извлечённого из access-токена.
+// @Tags         user
+// @Security     BearerAuth
+// @Produce      json
+// @Success      200  {object}  ProfileResponse
+// @Failure      401  {object}  response.ErrorBody
+// @Failure      404  {object}  response.ErrorBody
+// @Failure      500  {object}  response.ErrorBody
+// @Router       /api/v1/users/me [get]
 func (h *Handler) GetMe(c *gin.Context) {
 	userID, err := getUserIDFromContext(c)
 	if err != nil {
@@ -77,7 +87,21 @@ func (h *Handler) GetMe(c *gin.Context) {
 	c.JSON(http.StatusOK, toProfileResponse(user))
 }
 
-// UpdateMe обновляет профиль текущего пользователя.
+// UpdateMe godoc
+// @Summary      Обновить профиль текущего пользователя
+// @Description  Частичное обновление профиля (username, имя, уровень подготовки и т.п.).
+// @Tags         user
+// @Security     BearerAuth
+// @Accept       json
+// @Produce      json
+// @Param        payload  body      ProfileUpdateRequest  true  "Данные профиля"
+// @Success      200      {object}  ProfileResponse
+// @Failure      400      {object}  response.ErrorBody
+// @Failure      401      {object}  response.ErrorBody
+// @Failure      404      {object}  response.ErrorBody
+// @Failure      409      {object}  response.ErrorBody
+// @Failure      500      {object}  response.ErrorBody
+// @Router       /api/v1/users/me [put]
 func (h *Handler) UpdateMe(c *gin.Context) {
 	userID, err := getUserIDFromContext(c)
 	if err != nil {
@@ -160,7 +184,17 @@ func (h *Handler) UpdateMe(c *gin.Context) {
 	c.JSON(http.StatusOK, toProfileResponse(user))
 }
 
-// DeleteMe мягко удаляет аккаунт текущего пользователя.
+// DeleteMe godoc
+// @Summary      Удалить текущий аккаунт
+// @Description  Soft-delete (устанавливает deleted_at, не удаляя физически).
+// @Tags         user
+// @Security     BearerAuth
+// @Produce      json
+// @Success      204  "Аккаунт удалён"
+// @Failure      401  {object}  response.ErrorBody
+// @Failure      404  {object}  response.ErrorBody
+// @Failure      500  {object}  response.ErrorBody
+// @Router       /api/v1/users/me [delete]
 func (h *Handler) DeleteMe(c *gin.Context) {
 	userID, err := getUserIDFromContext(c)
 	if err != nil {

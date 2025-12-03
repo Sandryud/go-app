@@ -8,6 +8,15 @@ import (
 	"workout-app/internal/server"
 )
 
+// @title           Workout App API
+// @version         1.0
+// @description     API фитнес-приложения: аутентификация (JWT access + refresh) и профиль пользователя.
+// @BasePath        /
+//
+// @securityDefinitions.apikey BearerAuth
+// @in                         header
+// @name                       Authorization
+// @description                В формате: "Bearer <access_token>"
 func main() {
 	log.Println("Workout App Server Starting...")
 

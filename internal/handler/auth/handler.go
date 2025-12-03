@@ -31,7 +31,18 @@ func NewHandler(users useruc.Service, repo repo.UserRepository, jwt jwtsvc.Servi
 	}
 }
 
-// Register обрабатывает регистрацию пользователя.
+// Register godoc
+// @Summary      Регистрация пользователя
+// @Description  Регистрация по email/паролю/username. Возвращает пару access/refresh токенов.
+// @Tags         auth
+// @Accept       json
+// @Produce      json
+// @Param        payload  body      RegisterRequest      true  "Данные для регистрации"
+// @Success      201      {object}  LoginResponse
+// @Failure      400      {object}  response.ErrorBody
+// @Failure      409      {object}  response.ErrorBody
+// @Failure      500      {object}  response.ErrorBody
+// @Router       /api/v1/auth/register [post]
 func (h *Handler) Register(c *gin.Context) {
 	var req RegisterRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -89,7 +100,18 @@ func (h *Handler) Register(c *gin.Context) {
 	c.JSON(http.StatusCreated, resp)
 }
 
-// Login обрабатывает вход пользователя по email/паролю.
+// Login godoc
+// @Summary      Вход по email и паролю
+// @Description  Аутентификация пользователя. Возвращает пару access/refresh токенов.
+// @Tags         auth
+// @Accept       json
+// @Produce      json
+// @Param        payload  body      LoginRequest         true  "Данные для входа"
+// @Success      200      {object}  LoginResponse
+// @Failure      400      {object}  response.ErrorBody
+// @Failure      401      {object}  response.ErrorBody
+// @Failure      500      {object}  response.ErrorBody
+// @Router       /api/v1/auth/login [post]
 func (h *Handler) Login(c *gin.Context) {
 	var req LoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -142,7 +164,18 @@ func (h *Handler) Login(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
-// Refresh обрабатывает обновление пары токенов по refresh-токену.
+// Refresh godoc
+// @Summary      Обновление токенов
+// @Description  Обновление пары access/refresh токенов по действительному refresh-токену.
+// @Tags         auth
+// @Accept       json
+// @Produce      json
+// @Param        payload  body      RefreshRequest       true  "Refresh токен"
+// @Success      200      {object}  LoginResponse
+// @Failure      400      {object}  response.ErrorBody
+// @Failure      401      {object}  response.ErrorBody
+// @Failure      500      {object}  response.ErrorBody
+// @Router       /api/v1/auth/refresh [post]
 func (h *Handler) Refresh(c *gin.Context) {
 	var req RefreshRequest
 	if err := c.ShouldBindJSON(&req); err != nil {

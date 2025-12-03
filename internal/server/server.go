@@ -22,6 +22,9 @@ import (
 	useruc "workout-app/internal/usecase/user"
 	"workout-app/pkg/logger"
 	jwtsvc "workout-app/pkg/jwt"
+	swaggerFiles "github.com/swaggo/files"
+    ginSwagger "github.com/swaggo/gin-swagger"
+    _ "workout-app/api/swagger" // docs
 )
 
 // Server представляет HTTP сервер приложения
@@ -88,6 +91,8 @@ func (s *Server) setupRoutes() {
 	s.setupHealthRoutes()
 	s.setupAuthRoutes()
 	s.setupUserRoutes()
+
+	s.router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 }
 
 // setupHealthRoutes настраивает health-check эндпоинты.

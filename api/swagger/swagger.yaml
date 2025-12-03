@@ -1,0 +1,317 @@
+basePath: /
+definitions:
+  auth.LoginRequest:
+    properties:
+      email:
+        type: string
+      password:
+        type: string
+    required:
+    - email
+    - password
+    type: object
+  auth.LoginResponse:
+    properties:
+      email:
+        type: string
+      tokens:
+        $ref: '#/definitions/auth.TokenPair'
+      user_id:
+        type: string
+      username:
+        type: string
+    type: object
+  auth.RefreshRequest:
+    properties:
+      refresh_token:
+        type: string
+    required:
+    - refresh_token
+    type: object
+  auth.RegisterRequest:
+    properties:
+      email:
+        type: string
+      password:
+        minLength: 8
+        type: string
+      username:
+        maxLength: 32
+        minLength: 3
+        type: string
+    required:
+    - email
+    - password
+    - username
+    type: object
+  auth.TokenPair:
+    properties:
+      access_token:
+        type: string
+      refresh_token:
+        type: string
+    type: object
+  response.ErrorBody:
+    properties:
+      code:
+        type: string
+      details: {}
+      message:
+        type: string
+    type: object
+  user.ProfileResponse:
+    properties:
+      avatar_url:
+        type: string
+      birth_date:
+        type: string
+      created_at:
+        type: string
+      email:
+        type: string
+      first_name:
+        type: string
+      gender:
+        type: string
+      id:
+        type: string
+      last_name:
+        type: string
+      role:
+        type: string
+      training_level:
+        type: string
+      updated_at:
+        type: string
+      username:
+        type: string
+    type: object
+  user.ProfileUpdateRequest:
+    properties:
+      avatar_url:
+        type: string
+      birth_date:
+        type: string
+      first_name:
+        type: string
+      gender:
+        type: string
+      last_name:
+        type: string
+      training_level:
+        type: string
+      username:
+        type: string
+    type: object
+info:
+  contact: {}
+  description: 'API фитнес-приложения: аутентификация (JWT access + refresh) и профиль
+    пользователя.'
+  title: Workout App API
+  version: "1.0"
+paths:
+  /api/v1/auth/login:
+    post:
+      consumes:
+      - application/json
+      description: Аутентификация пользователя. Возвращает пару access/refresh токенов.
+      parameters:
+      - description: Данные для входа
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/auth.LoginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/auth.LoginResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorBody'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorBody'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorBody'
+      summary: Вход по email и паролю
+      tags:
+      - auth
+  /api/v1/auth/refresh:
+    post:
+      consumes:
+      - application/json
+      description: Обновление пары access/refresh токенов по действительному refresh-токену.
+      parameters:
+      - description: Refresh токен
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/auth.RefreshRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/auth.LoginResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorBody'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorBody'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorBody'
+      summary: Обновление токенов
+      tags:
+      - auth
+  /api/v1/auth/register:
+    post:
+      consumes:
+      - application/json
+      description: Регистрация по email/паролю/username. Возвращает пару access/refresh
+        токенов.
+      parameters:
+      - description: Данные для регистрации
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/auth.RegisterRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/auth.LoginResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorBody'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/response.ErrorBody'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorBody'
+      summary: Регистрация пользователя
+      tags:
+      - auth
+  /api/v1/users/me:
+    delete:
+      description: Soft-delete (устанавливает deleted_at, не удаляя физически).
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: Аккаунт удалён
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorBody'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorBody'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: Удалить текущий аккаунт
+      tags:
+      - user
+    get:
+      description: Возвращает профиль пользователя, извлечённого из access-токена.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/user.ProfileResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorBody'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorBody'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: Получить профиль текущего пользователя
+      tags:
+      - user
+    put:
+      consumes:
+      - application/json
+      description: Частичное обновление профиля (username, имя, уровень подготовки
+        и т.п.).
+      parameters:
+      - description: Данные профиля
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/user.ProfileUpdateRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/user.ProfileResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorBody'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorBody'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorBody'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/response.ErrorBody'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: Обновить профиль текущего пользователя
+      tags:
+      - user
+securityDefinitions:
+  BearerAuth:
+    description: 'В формате: "Bearer <access_token>"'
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"
