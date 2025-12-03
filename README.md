@@ -52,7 +52,76 @@ This project follows Clean Architecture principles with layered structure:
 3. Run migrations
 4. Start the server
 
+### Docker Setup
+
+Для запуска PostgreSQL через Docker:
+
+```bash
+# Запустить PostgreSQL
+make docker-up
+
+# Проверить подключение к базе данных
+make check-db
+
+# Остановить контейнеры
+make docker-down
+
+# Просмотр логов
+make docker-logs
+```
+
+Или используйте docker-compose напрямую:
+
+```bash
+# Запустить PostgreSQL
+docker-compose up -d postgres
+
+# Проверить статус
+docker-compose ps
+
+# Остановить
+docker-compose down
+```
+
+### Проверка подключения к базе данных
+
+Перед запуском сервера рекомендуется проверить подключение к базе данных:
+
+```bash
+make check-db
+```
+
+Или напрямую:
+
+```bash
+go run scripts/check-db.go
+```
+
+Скрипт проверит:
+- Загрузку конфигурации
+- Подключение к базе данных
+- Выполнение Ping
+- Выполнение тестового SQL запроса
+
 ## Development
 
-To be implemented...
+### Запуск приложения
+
+```bash
+# Локально (требуется запущенный PostgreSQL)
+make run
+
+# Или через Docker Compose (запускает и PostgreSQL, и приложение)
+docker-compose up
+```
+
+### Доступные команды
+
+- `make run` - Запустить приложение локально
+- `make build` - Собрать бинарник
+- `make test` - Запустить тесты
+- `make check-db` - Проверить подключение к БД
+- `make docker-up` - Запустить PostgreSQL в Docker
+- `make docker-down` - Остановить Docker контейнеры
+- `make docker-build` - Собрать Docker образ приложения
 

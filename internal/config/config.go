@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/joho/godotenv"
@@ -13,6 +14,7 @@ import (
 type Config struct {
 	Server   ServerConfig
 	Database DatabaseConfig
+	CORS     CORSConfig
 	AppEnv   string // Окружение приложения: development, production, etc.
 }
 
@@ -34,6 +36,16 @@ type DatabaseConfig struct {
 	MaxIdleConns    int           // Максимальное количество неактивных соединений
 	ConnMaxLifetime time.Duration // Максимальное время жизни соединения
 	ConnMaxIdleTime time.Duration // Максимальное время простоя соединения
+}
+
+// CORSConfig хранит конфигурацию CORS
+type CORSConfig struct {
+	AllowedOrigins   []string      // Разрешенные источники
+	AllowedMethods   []string      // Разрешенные HTTP методы
+	AllowedHeaders   []string      // Разрешенные заголовки
+	ExposedHeaders   []string      // Заголовки, доступные клиенту
+	AllowCredentials bool          // Разрешить отправку credentials
+	MaxAge           time.Duration // Время кеширования preflight запросов
 }
 
 // DSN возвращает строку подключения к базе данных
@@ -75,6 +87,9 @@ func Load() (*Config, error) {
 
 	// Загружаем окружение приложения
 	cfg.AppEnv = getEnv("APP_ENV", "development")
+
+	// Загружаем конфигурацию CORS
+	cfg.CORS = loadCORSConfig(cfg.AppEnv)
 
 	// Валидируем конфигурацию
 	if err := cfg.Validate(); err != nil {
@@ -137,4 +152,63 @@ func getEnvAsDuration(key string, defaultValue time.Duration) time.Duration {
 		return defaultValue
 	}
 	return duration
+}
+
+// loadCORSConfig загружает конфигурацию CORS из переменных окружения
+func loadCORSConfig(appEnv string) CORSConfig {
+	// Значения по умолчанию для development
+	defaultOrigins := []string{
+		"http://localhost:3000",
+		"http://localhost:5173",
+		"http://localhost:8080",
+	}
+	defaultMethods := []string{"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"}
+	defaultHeaders := []string{
+		"Origin",
+		"Content-Length",
+		"Content-Type",
+		"Authorization",
+		"X-Requested-With",
+		"Accept",
+		"Accept-Encoding",
+		"X-CSRF-Token",
+	}
+	defaultExposedHeaders := []string{"Content-Length", "Content-Type", "Authorization"}
+
+	cfg := CORSConfig{
+		AllowedOrigins:   getEnvAsSlice("CORS_ALLOWED_ORIGINS", defaultOrigins),
+		AllowedMethods:   getEnvAsSlice("CORS_ALLOWED_METHODS", defaultMethods),
+		AllowedHeaders:   getEnvAsSlice("CORS_ALLOWED_HEADERS", defaultHeaders),
+		ExposedHeaders:   getEnvAsSlice("CORS_EXPOSED_HEADERS", defaultExposedHeaders),
+		AllowCredentials: getEnv("CORS_ALLOW_CREDENTIALS", "true") == "true",
+		MaxAge:           getEnvAsDuration("CORS_MAX_AGE", 12*time.Hour),
+	}
+
+	// В production, если не указаны origins, используем пустой список (более безопасно)
+	if appEnv == "production" && os.Getenv("CORS_ALLOWED_ORIGINS") == "" {
+		cfg.AllowedOrigins = []string{}
+	}
+
+	return cfg
+}
+
+// getEnvAsSlice получает переменную окружения как slice строк, разделенных запятыми
+func getEnvAsSlice(key string, defaultValue []string) []string {
+	value := os.Getenv(key)
+	if value == "" {
+		return defaultValue
+	}
+	// Разделяем по запятой и очищаем пробелы
+	parts := strings.Split(value, ",")
+	result := make([]string, 0, len(parts))
+	for _, part := range parts {
+		trimmed := strings.TrimSpace(part)
+		if trimmed != "" {
+			result = append(result, trimmed)
+		}
+	}
+	if len(result) == 0 {
+		return defaultValue
+	}
+	return result
 }

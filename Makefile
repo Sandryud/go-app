@@ -38,3 +38,28 @@ vet: ## Запустить go vet
 fmt: ## Форматировать код
 	@go fmt ./...
 
+check-db: ## Проверить подключение к базе данных
+	@echo "Проверка подключения к базе данных..."
+	@echo "Убедитесь, что PostgreSQL запущен: make docker-up"
+	@DB_HOST=localhost go run scripts/check-db.go
+
+check-db-full: docker-up ## Запустить PostgreSQL и проверить подключение
+	@echo "Ожидание готовности PostgreSQL (10 секунд)..."
+	@sleep 10
+	@go run scripts/check-db.go
+
+docker-up: ## Запустить Docker Compose (PostgreSQL)
+	@docker-compose up -d postgres
+	@echo "Ожидание готовности PostgreSQL..."
+	@sleep 5
+	@docker-compose ps
+
+docker-down: ## Остановить Docker Compose
+	@docker-compose down
+
+docker-logs: ## Показать логи Docker Compose
+	@docker-compose logs -f
+
+docker-build: ## Собрать Docker образ приложения
+	@docker-compose build app
+

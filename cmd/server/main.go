@@ -4,6 +4,8 @@ import (
 	"log"
 
 	"workout-app/internal/config"
+	"workout-app/internal/database"
+	"workout-app/internal/server"
 )
 
 func main() {
@@ -19,5 +21,20 @@ func main() {
 	log.Printf("Сервер будет запущен на %s", cfg.Server.Address())
 	log.Printf("База данных: %s@%s:%s/%s", cfg.Database.User, cfg.Database.Host, cfg.Database.Port, cfg.Database.DBName)
 
-	// TODO: Инициализировать сервер с конфигурацией
+	// Инициализируем подключение к базе данных
+	db, err := database.NewConnection(&cfg.Database, cfg.AppEnv)
+	if err != nil {
+		log.Fatalf("Ошибка подключения к базе данных: %v", err)
+	}
+	defer func() {
+		if err := db.Close(); err != nil {
+			log.Printf("Ошибка закрытия подключения к базе данных: %v", err)
+		}
+	}()
+
+	// Создаем и запускаем HTTP сервер
+	srv := server.NewServer(cfg, db)
+	if err := srv.Start(); err != nil {
+		log.Fatalf("Ошибка запуска сервера: %v", err)
+	}
 }
