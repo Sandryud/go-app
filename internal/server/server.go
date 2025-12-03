@@ -20,6 +20,7 @@ import (
 	userhandler "workout-app/internal/handler/user"
 	pgrepo "workout-app/internal/repository/postgres"
 	useruc "workout-app/internal/usecase/user"
+	"workout-app/pkg/logger"
 	jwtsvc "workout-app/pkg/jwt"
 )
 
@@ -30,6 +31,7 @@ type Server struct {
 	db         *database.DB
 	cfg        *config.Config
 
+	logger     logger.Logger
 	jwtService  jwtsvc.Service
 	authHandler *authhandler.Handler
 	userHandler *userhandler.Handler
@@ -52,13 +54,15 @@ func NewServer(cfg *config.Config, db *database.DB) *Server {
 		cfg:    cfg,
 	}
 
+	s.logger = logger.Default()
+
 	// Инициализируем зависимости домена пользователя и аутентификации один раз
 	gormDB := db.DB
 	userRepo := pgrepo.NewUserRepository(gormDB)
 	userService := useruc.NewService(userRepo)
 	s.jwtService = jwtsvc.NewService(&cfg.JWT)
 	s.authHandler = authhandler.NewHandler(userService, userRepo, s.jwtService)
-	s.userHandler = userhandler.NewHandler(userService)
+	s.userHandler = userhandler.NewHandler(userService, s.logger)
 
 	// Настраиваем middleware и роуты
 	s.setupMiddleware()
@@ -123,7 +127,7 @@ func (s *Server) setupUserRoutes() {
 	v1 := s.router.Group("/api/v1")
 
 	userGroup := v1.Group("/users")
-	userGroup.Use(middleware.Auth(s.jwtService))
+	userGroup.Use(middleware.Auth(s.jwtService, s.logger))
 	{
 		// GET /api/v1/users/me — получить профиль текущего аутентифицированного пользователя.
 		userGroup.GET("/me", s.userHandler.GetMe)

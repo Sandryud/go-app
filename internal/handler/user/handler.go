@@ -2,7 +2,6 @@ package user
 
 import (
 	"errors"
-	"log"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -13,16 +12,21 @@ import (
 	"workout-app/internal/handler/response"
 	repo "workout-app/internal/repository/interfaces"
 	useruc "workout-app/internal/usecase/user"
+	"workout-app/pkg/logger"
 )
 
 // Handler обрабатывает HTTP-запросы, связанные с профилем пользователя.
 type Handler struct {
-	users useruc.Service
+	users  useruc.Service
+	logger logger.Logger
 }
 
 // NewHandler создаёт новый UserHandler.
-func NewHandler(users useruc.Service) *Handler {
-	return &Handler{users: users}
+func NewHandler(users useruc.Service, logger logger.Logger) *Handler {
+	return &Handler{
+		users:  users,
+		logger: logger,
+	}
 }
 
 // getUserIDFromContext извлекает идентификатор пользователя из контекста запроса.
@@ -52,11 +56,20 @@ func (h *Handler) GetMe(c *gin.Context) {
 	user, err := h.users.GetProfile(c.Request.Context(), userID)
 	if err != nil {
 		if errors.Is(err, repo.ErrNotFound) {
-			log.Printf("user not found in GetMe: user_id=%s", userID)
+			h.logger.Info("user_not_found_in_get_me", map[string]any{
+				"user_id": userID.String(),
+				"path":    c.Request.URL.Path,
+				"method":  c.Request.Method,
+			})
 			response.Error(c, http.StatusNotFound, "user_not_found", "Пользователь не найден", nil)
 			return
 		}
-		log.Printf("internal error in GetMe: user_id=%s err=%v", userID, err)
+		h.logger.Error("internal_error_in_get_me", map[string]any{
+			"user_id": userID.String(),
+			"path":    c.Request.URL.Path,
+			"method":  c.Request.Method,
+			"error":   err.Error(),
+		})
 		response.Error(c, http.StatusInternalServerError, "internal_error", "Внутренняя ошибка сервера", nil)
 		return
 	}
@@ -107,19 +120,38 @@ func (h *Handler) UpdateMe(c *gin.Context) {
 	if err != nil {
 		switch {
 		case errors.Is(err, repo.ErrEmailExists):
-			log.Printf("email conflict in UpdateMe: user_id=%s err=%v", userID, err)
+			h.logger.Info("email_conflict_in_update_me", map[string]any{
+				"user_id": userID.String(),
+				"path":    c.Request.URL.Path,
+				"method":  c.Request.Method,
+				"error":   err.Error(),
+			})
 			response.Error(c, http.StatusConflict, "email_already_exists", "Указанный email уже используется", nil)
 			return
 		case errors.Is(err, repo.ErrUsernameExists):
-			log.Printf("username conflict in UpdateMe: user_id=%s err=%v", userID, err)
+			h.logger.Info("username_conflict_in_update_me", map[string]any{
+				"user_id": userID.String(),
+				"path":    c.Request.URL.Path,
+				"method":  c.Request.Method,
+				"error":   err.Error(),
+			})
 			response.Error(c, http.StatusConflict, "username_already_exists", "Указанный никнейм уже используется", nil)
 			return
 		case errors.Is(err, repo.ErrNotFound):
-			log.Printf("user not found in UpdateMe: user_id=%s", userID)
+			h.logger.Info("user_not_found_in_update_me", map[string]any{
+				"user_id": userID.String(),
+				"path":    c.Request.URL.Path,
+				"method":  c.Request.Method,
+			})
 			response.Error(c, http.StatusNotFound, "user_not_found", "Пользователь не найден", nil)
 			return
 		default:
-			log.Printf("internal error in UpdateMe: user_id=%s err=%v", userID, err)
+			h.logger.Error("internal_error_in_update_me", map[string]any{
+				"user_id": userID.String(),
+				"path":    c.Request.URL.Path,
+				"method":  c.Request.Method,
+				"error":   err.Error(),
+			})
 			response.Error(c, http.StatusInternalServerError, "internal_error", "Внутренняя ошибка сервера", nil)
 			return
 		}
@@ -138,11 +170,20 @@ func (h *Handler) DeleteMe(c *gin.Context) {
 
 	if err := h.users.DeleteAccount(c.Request.Context(), userID); err != nil {
 		if errors.Is(err, repo.ErrNotFound) {
-			log.Printf("user not found in DeleteMe: user_id=%s", userID)
+			h.logger.Info("user_not_found_in_delete_me", map[string]any{
+				"user_id": userID.String(),
+				"path":    c.Request.URL.Path,
+				"method":  c.Request.Method,
+			})
 			response.Error(c, http.StatusNotFound, "user_not_found", "Пользователь не найден", nil)
 			return
 		}
-		log.Printf("internal error in DeleteMe: user_id=%s err=%v", userID, err)
+		h.logger.Error("internal_error_in_delete_me", map[string]any{
+			"user_id": userID.String(),
+			"path":    c.Request.URL.Path,
+			"method":  c.Request.Method,
+			"error":   err.Error(),
+		})
 		response.Error(c, http.StatusInternalServerError, "internal_error", "Внутренняя ошибка сервера", nil)
 		return
 	}
