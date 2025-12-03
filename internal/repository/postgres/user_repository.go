@@ -187,6 +187,28 @@ func (r *UserRepository) GetByUsername(ctx context.Context, username string) (*d
 	return r.oneByCondition(ctx, "username = ?", username)
 }
 
+// List возвращает всех активных (не удалённых) пользователей.
+func (r *UserRepository) List(ctx context.Context) ([]*domain.User, error) {
+	var models []pgUser
+	err := r.db.WithContext(ctx).
+		Where("deleted_at IS NULL").
+		Order("created_at DESC").
+		Find(&models).Error
+	if err != nil {
+		return nil, err
+	}
+
+	users := make([]*domain.User, 0, len(models))
+	for i := range models {
+		u, err := models[i].toDomain()
+		if err != nil {
+			return nil, err
+		}
+		users = append(users, u)
+	}
+	return users, nil
+}
+
 // Update обновляет данные пользователя.
 // Не обновляет защищенные поля: id, created_at, password_hash.
 func (r *UserRepository) Update(ctx context.Context, user *domain.User) error {

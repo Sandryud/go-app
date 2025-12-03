@@ -45,6 +45,10 @@ type UserRepository interface {
 
 	// SoftDelete помечает пользователя как удалённого (soft delete).
 	SoftDelete(ctx context.Context, id uuid.UUID) error
+
+	// List возвращает всех активных (не удалённых) пользователей.
+	// В первой версии без пагинации; при необходимости можно расширить фильтрами.
+	List(ctx context.Context) ([]*domain.User, error)
 }
 
 

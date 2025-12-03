@@ -206,4 +206,43 @@ curl -i -X DELETE http://localhost:8080/api/v1/users/me \
   -H "Authorization: Bearer $ACCESS"
 ```
 
+---
+
+## Admin (роль admin)
+
+### GET `/api/v1/admin/users`
+
+- **Описание**: получить список всех активных пользователей.
+- **Доступ**: только для пользователей с ролью `admin`.
+- **Заголовок**: `Authorization: Bearer <access_token>` (токен администратора)
+- **Успех**: `200 OK`
+
+```json
+[
+  {
+    "id": "3691663d-0fb2-4cc4-a0c3-8ad710d00835",
+    "email": "user1@example.com",
+    "username": "user1",
+    "role": "user",
+    "training_level": "beginner",
+    "created_at": "...",
+    "updated_at": "..."
+  },
+  {
+    "id": "....",
+    "email": "user2@example.com",
+    "username": "user2",
+    "role": "coach",
+    "training_level": "intermediate",
+    "created_at": "...",
+    "updated_at": "..."
+  }
+]
+```
+
+- **Ошибки**:
+  - `401 unauthorized` / `missing_authorization_header` / `invalid_token`
+  - `403 forbidden` — роль пользователя не входит в разрешённые (не admin).
+
+
 

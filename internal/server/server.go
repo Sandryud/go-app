@@ -18,13 +18,14 @@ import (
 	"workout-app/internal/handler/health"
 	"workout-app/internal/handler/middleware"
 	userhandler "workout-app/internal/handler/user"
+	domain "workout-app/internal/domain/user"
 	pgrepo "workout-app/internal/repository/postgres"
 	useruc "workout-app/internal/usecase/user"
 	"workout-app/pkg/logger"
 	jwtsvc "workout-app/pkg/jwt"
 	swaggerFiles "github.com/swaggo/files"
-    ginSwagger "github.com/swaggo/gin-swagger"
-    _ "workout-app/api/swagger" // docs
+	ginSwagger "github.com/swaggo/gin-swagger"
+	_ "workout-app/api/swagger" // docs
 )
 
 // Server представляет HTTP сервер приложения
@@ -140,6 +141,14 @@ func (s *Server) setupUserRoutes() {
 		userGroup.PUT("/me", s.userHandler.UpdateMe)
 		// DELETE /api/v1/users/me — мягко удалить (деактивировать) аккаунт текущего пользователя.
 		userGroup.DELETE("/me", s.userHandler.DeleteMe)
+	}
+
+	// Админские роуты
+	adminGroup := v1.Group("/admin")
+	adminGroup.Use(middleware.Auth(s.jwtService, s.logger), middleware.RequireRole(s.logger, domain.RoleAdmin))
+	{
+		// GET /api/v1/admin/users — список всех активных пользователей (только для admin).
+		adminGroup.GET("/users", s.userHandler.ListUsers)
 	}
 }
 

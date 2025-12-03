@@ -30,6 +30,10 @@ type Service interface {
 
 	// DeleteAccount выполняет мягкое удаление аккаунта.
 	DeleteAccount(ctx context.Context, userID uuid.UUID) error
+
+	// ListUsers возвращает список всех активных пользователей.
+	// Предназначено для административных сценариев.
+	ListUsers(ctx context.Context) ([]*domain.User, error)
 }
 
 // ProfileUpdateInput описывает допустимые изменения в профиле пользователя
@@ -128,5 +132,11 @@ func (s *service) UpdateProfile(ctx context.Context, userID uuid.UUID, input Pro
 func (s *service) DeleteAccount(ctx context.Context, userID uuid.UUID) error {
 	return s.users.SoftDelete(ctx, userID)
 }
+
+// ListUsers возвращает всех активных пользователей.
+func (s *service) ListUsers(ctx context.Context) ([]*domain.User, error) {
+	return s.users.List(ctx)
+}
+
 
 

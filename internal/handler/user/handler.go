@@ -225,6 +225,37 @@ func (h *Handler) DeleteMe(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
+// ListUsers godoc
+// @Summary      Получить список всех пользователей (админ)
+// @Description  Возвращает список всех активных пользователей. Доступно только для роли admin.
+// @Tags         user
+// @Security     BearerAuth
+// @Produce      json
+// @Success      200  {array}   ProfileResponse
+// @Failure      401  {object}  response.ErrorBody
+// @Failure      403  {object}  response.ErrorBody
+// @Failure      500  {object}  response.ErrorBody
+// @Router       /api/v1/admin/users [get]
+func (h *Handler) ListUsers(c *gin.Context) {
+	users, err := h.users.ListUsers(c.Request.Context())
+	if err != nil {
+		h.logger.Error("internal_error_in_list_users", map[string]any{
+			"path":   c.Request.URL.Path,
+			"method": c.Request.Method,
+			"error":  err.Error(),
+		})
+		response.Error(c, http.StatusInternalServerError, "internal_error", "Внутренняя ошибка сервера", nil)
+		return
+	}
+
+	resp := make([]ProfileResponse, 0, len(users))
+	for _, u := range users {
+		resp = append(resp, toProfileResponse(u))
+	}
+
+	c.JSON(http.StatusOK, resp)
+}
+
 // toProfileResponse маппит доменную модель в DTO.
 func toProfileResponse(u *domain.User) ProfileResponse {
 	return ProfileResponse{
