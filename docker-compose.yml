@@ -41,6 +41,12 @@ services:
       DB_NAME: ${DB_NAME:-workout_app}
       DB_SSLMODE: ${DB_SSLMODE:-disable}
       APP_ENV: ${APP_ENV:-development}
+      # JWT configuration (в проде переопределить секреты через переменные окружения/секреты)
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-dev_access_secret_change_me}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-dev_refresh_secret_change_me}
+      JWT_ACCESS_TTL: ${JWT_ACCESS_TTL:-15m}
+      JWT_REFRESH_TTL: ${JWT_REFRESH_TTL:-168h}
+      JWT_ISSUER: ${JWT_ISSUER:-workout-app}
     ports:
       - "${SERVER_PORT:-8080}:8080"
     networks:

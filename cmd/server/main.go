@@ -20,6 +20,7 @@ func main() {
 	log.Printf("Конфигурация загружена успешно")
 	log.Printf("Сервер будет запущен на %s", cfg.Server.Address())
 	log.Printf("База данных: %s@%s:%s/%s", cfg.Database.User, cfg.Database.Host, cfg.Database.Port, cfg.Database.DBName)
+	log.Printf("JWT: issuer=%s access_ttl=%s refresh_ttl=%s", cfg.JWT.Issuer, cfg.JWT.AccessTTL, cfg.JWT.RefreshTTL)
 
 	// Инициализируем подключение к базе данных
 	db, err := database.NewConnection(&cfg.Database, cfg.AppEnv)
