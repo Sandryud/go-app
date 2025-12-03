@@ -8,7 +8,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
-	domain "workout-app/internal/domain/user"
 	"workout-app/internal/handler/response"
 	repo "workout-app/internal/repository/interfaces"
 	useruc "workout-app/internal/usecase/user"
