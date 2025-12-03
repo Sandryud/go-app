@@ -5,7 +5,8 @@ package auth
 type RegisterRequest struct {
 	Email    string `json:"email" binding:"required,email"`
 	Password string `json:"password" binding:"required,min=8"`
-	Username string `json:"username" binding:"required,min=3,max=32"`
+	// Username должен состоять только из букв и цифр (без пробелов и спецсимволов).
+	Username string `json:"username" binding:"required,alphanum,min=3,max=32"`
 }
 
 // LoginRequest описывает тело запроса логина.

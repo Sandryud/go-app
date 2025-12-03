@@ -22,7 +22,8 @@ type ProfileResponse struct {
 // ProfileUpdateRequest описывает тело запроса для отдельного эндпоинта
 // обновления профильной информации пользователя.
 type ProfileUpdateRequest struct {
-	Username    *string   `json:"username,omitempty"`
+	// Username при обновлении также ограничен только буквами и цифрами.
+	Username    *string   `json:"username,omitempty" binding:"omitempty,alphanum,min=3,max=32"`
 	FirstName   *string   `json:"first_name,omitempty"`
 	LastName    *string   `json:"last_name,omitempty"`
 	BirthDate   *time.Time `json:"birth_date,omitempty"`
