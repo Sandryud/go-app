@@ -15,6 +15,7 @@ type Config struct {
 	Server   ServerConfig
 	Database DatabaseConfig
 	CORS     CORSConfig
+	JWT      JWTConfig
 	AppEnv   string // Окружение приложения: development, production, etc.
 }
 
@@ -46,6 +47,15 @@ type CORSConfig struct {
 	ExposedHeaders   []string      // Заголовки, доступные клиенту
 	AllowCredentials bool          // Разрешить отправку credentials
 	MaxAge           time.Duration // Время кеширования preflight запросов
+}
+
+// JWTConfig хранит конфигурацию JWT-токенов (access + refresh).
+type JWTConfig struct {
+	AccessSecret  string        // Секрет для подписи access-токенов
+	RefreshSecret string        // Секрет для подписи refresh-токенов
+	AccessTTL     time.Duration // Время жизни access-токена
+	RefreshTTL    time.Duration // Время жизни refresh-токена
+	Issuer        string        // Issuer (iss) для токенов
 }
 
 // DSN возвращает строку подключения к базе данных
@@ -88,6 +98,15 @@ func Load() (*Config, error) {
 	// Загружаем окружение приложения
 	cfg.AppEnv = getEnv("APP_ENV", "development")
 
+	// Загружаем конфигурацию JWT
+	cfg.JWT = JWTConfig{
+		AccessSecret:  getEnv("JWT_ACCESS_SECRET", ""),
+		RefreshSecret: getEnv("JWT_REFRESH_SECRET", ""),
+		AccessTTL:     getEnvAsDuration("JWT_ACCESS_TTL", 15*time.Minute),
+		RefreshTTL:    getEnvAsDuration("JWT_REFRESH_TTL", 7*24*time.Hour),
+		Issuer:        getEnv("JWT_ISSUER", "workout-app"),
+	}
+
 	// Загружаем конфигурацию CORS
 	cfg.CORS = loadCORSConfig(cfg.AppEnv)
 
@@ -115,6 +134,12 @@ func (c *Config) Validate() error {
 	}
 	if c.Database.DBName == "" {
 		return fmt.Errorf("DB_NAME не может быть пустым")
+	}
+	if c.JWT.AccessSecret == "" {
+		return fmt.Errorf("JWT_ACCESS_SECRET не может быть пустым")
+	}
+	if c.JWT.RefreshSecret == "" {
+		return fmt.Errorf("JWT_REFRESH_SECRET не может быть пустым")
 	}
 	return nil
 }
