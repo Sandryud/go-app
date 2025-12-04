@@ -30,9 +30,26 @@ func TestUser_Profile_Flow(t *testing.T) {
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
 
-	var regResp authhandler.LoginResponse
+	var regResp authhandler.RegisterResponse
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &regResp))
-	access := regResp.Tokens.AccessToken
+	require.Equal(t, "uflow@example.com", regResp.Email)
+	require.Equal(t, "uflow", regResp.Username)
+	require.NotEmpty(t, regResp.UserID)
+
+	// Форсируем подтверждение email в БД для получения токенов через логин.
+	testcfg.VerifyUserEmailForTests(t, regResp.Email)
+
+	// Выполняем логин, чтобы получить access-токен.
+	loginBody := `{"email":"uflow@example.com","password":"Password123!"}`
+	w = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", strings.NewReader(loginBody))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	var loginResp authhandler.LoginResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &loginResp))
+	access := loginResp.Tokens.AccessToken
 
 	// 2. GET /users/me
 	w = httptest.NewRecorder()
@@ -87,10 +104,22 @@ func TestUser_GetByID(t *testing.T) {
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
 
-	var regResp1 authhandler.LoginResponse
+	var regResp1 authhandler.RegisterResponse
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &regResp1))
 	user1ID := regResp1.UserID
-	access1 := regResp1.Tokens.AccessToken
+
+	// Форсируем подтверждение email первого пользователя и логинимся.
+	testcfg.VerifyUserEmailForTests(t, regResp1.Email)
+	loginBody1 := `{"email":"testuser@example.com","password":"Password123!"}`
+	w = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", strings.NewReader(loginBody1))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	var loginResp1 authhandler.LoginResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &loginResp1))
+	access1 := loginResp1.Tokens.AccessToken
 
 	// 2. Обновление профиля первого пользователя для проверки данных
 	updateBody := `{"first_name":"Иван","last_name":"Иванов","training_level":"intermediate"}`
@@ -109,9 +138,21 @@ func TestUser_GetByID(t *testing.T) {
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
 
-	var regResp2 authhandler.LoginResponse
+	var regResp2 authhandler.RegisterResponse
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &regResp2))
-	access2 := regResp2.Tokens.AccessToken
+
+	// Форсируем подтверждение email второго пользователя и логинимся.
+	testcfg.VerifyUserEmailForTests(t, regResp2.Email)
+	loginBody2 := `{"email":"testuser2@example.com","password":"Password123!"}`
+	w = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", strings.NewReader(loginBody2))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	var loginResp2 authhandler.LoginResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &loginResp2))
+	access2 := loginResp2.Tokens.AccessToken
 
 	// 4. GET /users/:id - успешное получение публичного профиля (второй пользователь получает профиль первого)
 	w = httptest.NewRecorder()

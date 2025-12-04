@@ -17,7 +17,7 @@ import (
 )
 
 // TestAuth_Register_Login_Refresh проверяет happy-path:
-// регистрация -> логин -> refresh токенов.
+// регистрация -> (форсированное подтверждение email в тесте) -> логин -> refresh токенов.
 func TestAuth_Register_Login_Refresh(t *testing.T) {
 	router := testcfg.NewTestRouter(t)
 
@@ -30,12 +30,14 @@ func TestAuth_Register_Login_Refresh(t *testing.T) {
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
 
-	var regResp authhandler.LoginResponse
+	var regResp authhandler.RegisterResponse
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &regResp))
 	require.Equal(t, "itest1@example.com", regResp.Email)
 	require.Equal(t, "itest1", regResp.Username)
-	require.NotEmpty(t, regResp.Tokens.AccessToken)
-	require.NotEmpty(t, regResp.Tokens.RefreshToken)
+	require.NotEmpty(t, regResp.UserID)
+
+	// В тестах код из email недоступен, поэтому мы форсируем подтверждение email в БД.
+	testcfg.VerifyUserEmailForTests(t, regResp.Email)
 
 	// 2. Логин
 	loginBody := `{"email":"itest1@example.com","password":"Password123!"}`

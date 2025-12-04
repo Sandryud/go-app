@@ -18,6 +18,8 @@ import (
 	"workout-app/internal/server"
 )
 
+var testDB *database.DB
+
 // NewTestRouter создает новый экземпляр gin.Engine для интеграционных тестов.
 // Использует отдельную тестовую БД, если задана переменная окружения TEST_DB_NAME.
 func NewTestRouter(t *testing.T) *gin.Engine {
@@ -46,6 +48,8 @@ func NewTestRouter(t *testing.T) *gin.Engine {
 		t.Fatalf("db connection: %v", err)
 	}
 
+	testDB = db
+
 	// Применяем миграцию и очищаем данные перед каждым тестом.
 	if err := migrateUsers(db); err != nil {
 		t.Fatalf("migrate users: %v", err)
@@ -56,6 +60,7 @@ func NewTestRouter(t *testing.T) *gin.Engine {
 
 	t.Cleanup(func() {
 		_ = db.Close()
+		testDB = nil
 	})
 
 	srv := server.NewServer(cfg, db)
@@ -80,27 +85,35 @@ func findProjectRoot() (string, error) {
 	}
 }
 
-// migrateUsers применяет SQL-миграцию для таблицы users.
+// migrateUsers применяет SQL-миграции для таблицы users и связанных сущностей.
 func migrateUsers(db *database.DB) error {
-	sqlBytes, err := os.ReadFile("internal/database/migrations/001_create_users_table.sql")
-	if err != nil {
-		return err
+	files := []string{
+		"internal/database/migrations/001_create_users_table.sql",
+		"internal/database/migrations/002_add_is_email_verified_to_users.sql",
+		"internal/database/migrations/003_create_email_verifications_table.sql",
 	}
-	if err := db.Exec(string(sqlBytes)).Error; err != nil {
-		// В интеграционных тестах миграция может быть уже применена (триггер/индексы существуют).
-		// Игнорируем дубликат триггера "update_users_updated_at".
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) {
-			if pgErr.Code == "42710" && strings.Contains(pgErr.Message, "update_users_updated_at") {
-				return nil
+
+	for _, path := range files {
+		sqlBytes, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		if err := db.Exec(string(sqlBytes)).Error; err != nil {
+			// В интеграционных тестах миграция может быть уже применена (например, при повторных запусках).
+			// Игнорируем дубликат триггера "update_users_updated_at".
+			var pgErr *pgconn.PgError
+			if errors.As(err, &pgErr) {
+				if pgErr.Code == "42710" && strings.Contains(pgErr.Message, "update_users_updated_at") {
+					continue
+				}
 			}
+			// Fallback по тексту ошибки, если err не приведён к *pgconn.PgError
+			msg := err.Error()
+			if strings.Contains(msg, "42710") && strings.Contains(msg, "update_users_updated_at") {
+				continue
+			}
+			return err
 		}
-		// Fallback по тексту ошибки, если err не приведён к *pgconn.PgError
-		msg := err.Error()
-		if strings.Contains(msg, "42710") && strings.Contains(msg, "update_users_updated_at") {
-			return nil
-		}
-		return err
 	}
 	return nil
 }
@@ -110,4 +123,14 @@ func clearUsers(db *database.DB) error {
 	return db.Exec("TRUNCATE TABLE users RESTART IDENTITY CASCADE").Error
 }
 
-
+// VerifyUserEmailForTests принудительно помечает email как подтверждённый в БД
+// для интеграционных сценариев, где код из письма недоступен.
+func VerifyUserEmailForTests(t *testing.T, email string) {
+	t.Helper()
+	if testDB == nil {
+		t.Fatalf("test database is not initialized")
+	}
+	if err := testDB.Exec(`UPDATE users SET is_email_verified = TRUE WHERE email = ?`, email).Error; err != nil {
+		t.Fatalf("failed to verify user email in tests: %v", err)
+	}
+}
