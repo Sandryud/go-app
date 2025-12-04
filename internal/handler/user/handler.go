@@ -45,6 +45,15 @@ func getUserIDFromContext(c *gin.Context) (uuid.UUID, error) {
 	return id, nil
 }
 
+// getRequestContext возвращает базовые поля контекста запроса для логирования.
+func getRequestContext(c *gin.Context, userID uuid.UUID) map[string]any {
+	return map[string]any{
+		"user_id": userID.String(),
+		"path":    c.Request.URL.Path,
+		"method":  c.Request.Method,
+	}
+}
+
 // GetMe godoc
 // @Summary      Получить профиль текущего пользователя
 // @Description  Возвращает профиль пользователя, извлечённого из access-токена.
@@ -311,6 +320,132 @@ func (h *Handler) ListUsers(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
+// RequestEmailChange godoc
+// @Summary      Запросить изменение email
+// @Description  Отправляет код подтверждения на новый email для изменения email пользователя.
+// @Tags         user
+// @Security     BearerAuth
+// @Accept       json
+// @Produce      json
+// @Param        payload  body      ChangeEmailRequest  true  "Новый email"
+// @Success      200      {object}  ChangeEmailResponse
+// @Failure      400      {object}  response.ErrorBody
+// @Failure      401      {object}  response.ErrorBody
+// @Failure      404      {object}  response.ErrorBody
+// @Failure      409      {object}  response.ErrorBody
+// @Failure      500      {object}  response.ErrorBody
+// @Router       /api/v1/users/me/change-email [post]
+func (h *Handler) RequestEmailChange(c *gin.Context) {
+	userID, err := getUserIDFromContext(c)
+	if err != nil {
+		response.Error(c, http.StatusUnauthorized, "unauthorized", "Требуется аутентификация", nil)
+		return
+	}
+
+	var req ChangeEmailRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, http.StatusBadRequest, "invalid_request", "Некорректное тело запроса", err.Error())
+		return
+	}
+
+	err = h.users.RequestEmailChange(c.Request.Context(), userID, req.NewEmail)
+	if err != nil {
+		switch {
+		case errors.Is(err, useruc.ErrEmailSameAsCurrent):
+			ctx := getRequestContext(c, userID)
+			ctx["new_email"] = req.NewEmail
+			h.logger.Info("email_same_as_current", ctx)
+			response.Error(c, http.StatusBadRequest, "email_same_as_current", "Новый email совпадает с текущим", nil)
+			return
+		case errors.Is(err, repo.ErrEmailExists):
+			ctx := getRequestContext(c, userID)
+			ctx["new_email"] = req.NewEmail
+			h.logger.Info("email_already_exists", ctx)
+			response.Error(c, http.StatusConflict, "email_already_exists", "Указанный email уже используется", nil)
+			return
+		case errors.Is(err, repo.ErrNotFound):
+			h.logger.Info("user_not_found", getRequestContext(c, userID))
+			response.Error(c, http.StatusNotFound, "user_not_found", "Пользователь не найден", nil)
+			return
+		default:
+			ctx := getRequestContext(c, userID)
+			ctx["new_email"] = req.NewEmail
+			ctx["error"] = err.Error()
+			h.logger.Error("internal_error", ctx)
+			response.Error(c, http.StatusInternalServerError, "internal_error", "Внутренняя ошибка сервера", nil)
+			return
+		}
+	}
+
+	c.JSON(http.StatusOK, ChangeEmailResponse{
+		Message: "Код подтверждения отправлен на ваш новый email",
+	})
+}
+
+// VerifyEmailChange godoc
+// @Summary      Подтвердить изменение email
+// @Description  Подтверждает изменение email по коду, отправленному на новый email. Обновляет email пользователя.
+// @Tags         user
+// @Security     BearerAuth
+// @Accept       json
+// @Produce      json
+// @Param        payload  body      VerifyEmailChangeRequest  true  "Код подтверждения"
+// @Success      200      {object}  ProfileResponse
+// @Failure      400      {object}  response.ErrorBody
+// @Failure      401      {object}  response.ErrorBody
+// @Failure      404      {object}  response.ErrorBody
+// @Failure      500      {object}  response.ErrorBody
+// @Router       /api/v1/users/me/verify-email-change [post]
+func (h *Handler) VerifyEmailChange(c *gin.Context) {
+	userID, err := getUserIDFromContext(c)
+	if err != nil {
+		response.Error(c, http.StatusUnauthorized, "unauthorized", "Требуется аутентификация", nil)
+		return
+	}
+
+	var req VerifyEmailChangeRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, http.StatusBadRequest, "invalid_request", "Некорректное тело запроса", err.Error())
+		return
+	}
+
+	user, err := h.users.VerifyEmailChange(c.Request.Context(), userID, req.Code)
+	if err != nil {
+		switch {
+		case errors.Is(err, useruc.ErrVerificationCodeNotFound):
+			h.logger.Info("verification_code_not_found", getRequestContext(c, userID))
+			response.Error(c, http.StatusBadRequest, "verification_code_not_found", "Код подтверждения не найден или истёк срок действия. Запросите новый код.", nil)
+			return
+		case errors.Is(err, useruc.ErrVerificationCodeInvalid):
+			h.logger.Info("verification_code_invalid", getRequestContext(c, userID))
+			response.Error(c, http.StatusBadRequest, "verification_code_invalid", "Неверный код подтверждения", nil)
+			return
+		case errors.Is(err, useruc.ErrVerificationAttemptsExceeded):
+			h.logger.Info("verification_attempts_exceeded", getRequestContext(c, userID))
+			response.Error(c, http.StatusBadRequest, "verification_attempts_exceeded", "Превышен лимит попыток ввода кода. Запросите новый код.", nil)
+			return
+		case errors.Is(err, repo.ErrEmailExists):
+			h.logger.Info("email_already_exists", getRequestContext(c, userID))
+			response.Error(c, http.StatusConflict, "email_already_exists", "Указанный email уже используется", nil)
+			return
+		case errors.Is(err, repo.ErrNotFound):
+			ctx := getRequestContext(c, userID)
+			ctx["error"] = err.Error()
+			h.logger.Error("user_not_found", ctx)
+			response.Error(c, http.StatusNotFound, "user_not_found", "Пользователь не найден", nil)
+			return
+		default:
+			ctx := getRequestContext(c, userID)
+			ctx["error"] = err.Error()
+			h.logger.Error("internal_error", ctx)
+			response.Error(c, http.StatusInternalServerError, "internal_error", "Внутренняя ошибка сервера", nil)
+			return
+		}
+	}
+
+	c.JSON(http.StatusOK, toProfileResponse(user))
+}
+
 // toProfileResponse маппит доменную модель в DTO.
 func toProfileResponse(u *domain.User) ProfileResponse {
 	return ProfileResponse{
@@ -345,5 +480,3 @@ func toPublicProfileResponse(u *domain.User) PublicProfileResponse {
 		UpdatedAt:     u.UpdatedAt,
 	}
 }
-
-

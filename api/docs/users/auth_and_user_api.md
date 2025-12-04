@@ -267,7 +267,7 @@ curl -i http://localhost:8080/api/v1/users/me \
 
 ### PUT `/api/v1/users/me`
 
-- **Описание**: частичное обновление профиля.
+- **Описание**: частичное обновление профиля. Email нельзя изменить через этот эндпоинт. Для изменения email используйте `/api/v1/users/me/change-email` и `/api/v1/users/me/verify-email-change`.
 - **Тело** (все поля опциональны):
 
 ```json
@@ -287,7 +287,7 @@ curl -i http://localhost:8080/api/v1/users/me \
   - `400 invalid_request` — невалидный JSON/формат.
   - `401 unauthorized`
   - `404 user_not_found`
-  - `409 email_already_exists` / `username_already_exists`
+  - `409 username_already_exists` — указанный username уже используется.
 
 Пример:
 
@@ -313,6 +313,93 @@ curl -i -X PUT http://localhost:8080/api/v1/users/me \
 ```bash
 curl -i -X DELETE http://localhost:8080/api/v1/users/me \
   -H "Authorization: Bearer $ACCESS"
+```
+
+---
+
+### POST `/api/v1/users/me/change-email`
+
+- **Описание**: запрос на изменение email пользователя. Отправляет код подтверждения на новый email. Для завершения изменения email необходимо подтвердить код через `/api/v1/users/me/verify-email-change`.
+- **Заголовок**: `Authorization: Bearer <access_token>`
+- **Тело запроса**:
+
+```json
+{
+  "new_email": "newemail@example.com"
+}
+```
+
+- **Успех**: `200 OK`
+
+```json
+{
+  "message": "Verification code has been sent to your new email"
+}
+```
+
+- **Ошибки**:
+  - `400 invalid_request` — невалидное тело запроса.
+  - `400 email_same_as_current` — новый email совпадает с текущим.
+  - `401 unauthorized` — требуется аутентификация.
+  - `404 user_not_found` — пользователь не найден.
+  - `409 email_already_exists` — указанный email уже используется другим пользователем.
+
+Пример:
+
+```bash
+curl -i -X POST http://localhost:8080/api/v1/users/me/change-email \
+  -H "Authorization: Bearer $ACCESS" \
+  -H "Content-Type: application/json" \
+  -d '{"new_email":"newemail@example.com"}'
+```
+
+---
+
+### POST `/api/v1/users/me/verify-email-change`
+
+- **Описание**: подтверждение изменения email одноразовым кодом, отправленным на новый email. После успешного подтверждения email пользователя обновляется, и `IsEmailVerified` устанавливается в `true`.
+- **Заголовок**: `Authorization: Bearer <access_token>`
+- **Тело запроса**:
+
+```json
+{
+  "code": "123456"
+}
+```
+
+- **Успех**: `200 OK` + обновлённый профиль пользователя.
+
+```json
+{
+  "id": "3691663d-0fb2-4cc4-a0c3-8ad710d00835",
+  "email": "newemail@example.com",
+  "username": "user1",
+  "first_name": "Иван",
+  "last_name": "Иванов",
+  "gender": "male",
+  "role": "user",
+  "training_level": "intermediate",
+  "created_at": "...",
+  "updated_at": "..."
+}
+```
+
+- **Ошибки**:
+  - `400 invalid_request` — невалидное тело запроса.
+  - `400 verification_code_not_found` — код не найден или истёк срок действия. Запросите новый код через `/api/v1/users/me/change-email`.
+  - `400 verification_code_invalid` — неверный код подтверждения.
+  - `400 verification_attempts_exceeded` — превышен лимит попыток ввода кода. Запросите новый код.
+  - `401 unauthorized` — требуется аутентификация.
+  - `404 user_not_found` — пользователь не найден.
+  - `409 email_already_exists` — указанный email уже используется другим пользователем.
+
+Пример:
+
+```bash
+curl -i -X POST http://localhost:8080/api/v1/users/me/verify-email-change \
+  -H "Authorization: Bearer $ACCESS" \
+  -H "Content-Type: application/json" \
+  -d '{"code":"123456"}'
 ```
 
 ---

@@ -192,6 +192,10 @@ func (s *Server) setupUserRoutes() {
 		userGroup.PUT("/me", s.userHandler.UpdateMe)
 		// DELETE /api/v1/users/me — мягко удалить (деактивировать) аккаунт текущего пользователя.
 		userGroup.DELETE("/me", s.userHandler.DeleteMe)
+		// POST /api/v1/users/me/change-email — запросить изменение email (отправка кода на новый email).
+		userGroup.POST("/me/change-email", s.userHandler.RequestEmailChange)
+		// POST /api/v1/users/me/verify-email-change — подтвердить изменение email по коду.
+		userGroup.POST("/me/verify-email-change", s.userHandler.VerifyEmailChange)
 		// GET /api/v1/users/:id — получить публичный профиль пользователя по ID.
 		userGroup.GET("/:id", s.userHandler.GetByID)
 	}
