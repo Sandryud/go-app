@@ -28,7 +28,7 @@ func Auth(jwtService jwtsvc.Service, log logger.Logger) gin.HandlerFunc {
 				"path":   c.Request.URL.Path,
 				"method": c.Request.Method,
 			})
-			response.Error(c, http.StatusUnauthorized, "missing_authorization_header", "Отсутствует заголовок Authorization", nil)
+			response.Error(c, http.StatusUnauthorized, "missing_authorization_header", "Missing Authorization header", nil)
 			return
 		}
 
@@ -39,7 +39,7 @@ func Auth(jwtService jwtsvc.Service, log logger.Logger) gin.HandlerFunc {
 				"method": c.Request.Method,
 				"value":  authHeader,
 			})
-			response.Error(c, http.StatusUnauthorized, "invalid_authorization_header", "Некорректный формат заголовка Authorization", nil)
+			response.Error(c, http.StatusUnauthorized, "invalid_authorization_header", "Invalid Authorization header format", nil)
 			return
 		}
 
@@ -49,7 +49,7 @@ func Auth(jwtService jwtsvc.Service, log logger.Logger) gin.HandlerFunc {
 				"path":   c.Request.URL.Path,
 				"method": c.Request.Method,
 			})
-			response.Error(c, http.StatusUnauthorized, "invalid_authorization_header", "Некорректный формат заголовка Authorization", nil)
+			response.Error(c, http.StatusUnauthorized, "invalid_authorization_header", "Invalid Authorization header format", nil)
 			return
 		}
 
@@ -60,7 +60,7 @@ func Auth(jwtService jwtsvc.Service, log logger.Logger) gin.HandlerFunc {
 				"method": c.Request.Method,
 				"error":  err.Error(),
 			})
-			response.Error(c, http.StatusUnauthorized, "invalid_token", "Недействительный access-токен", nil)
+			response.Error(c, http.StatusUnauthorized, "invalid_token", "Invalid access token", nil)
 			return
 		}
 
@@ -92,7 +92,7 @@ func RequireRole(log logger.Logger, allowedRoles ...domain.Role) gin.HandlerFunc
 				"path":   c.Request.URL.Path,
 				"method": c.Request.Method,
 			})
-			response.Error(c, http.StatusForbidden, "forbidden", "Недостаточно прав для доступа к ресурсу", nil)
+			response.Error(c, http.StatusForbidden, "forbidden", "Insufficient permissions to access this resource", nil)
 			c.Abort()
 			return
 		}
@@ -109,7 +109,7 @@ func RequireRole(log logger.Logger, allowedRoles ...domain.Role) gin.HandlerFunc
 				"method": c.Request.Method,
 				"role":   role,
 			})
-			response.Error(c, http.StatusForbidden, "forbidden", "Недостаточно прав для доступа к ресурсу", nil)
+			response.Error(c, http.StatusForbidden, "forbidden", "Insufficient permissions to access this resource", nil)
 			c.Abort()
 			return
 		}

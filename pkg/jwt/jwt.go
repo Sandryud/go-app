@@ -17,6 +17,7 @@ type Claims struct {
 	Username      string `json:"username,omitempty"`
 	Role          string `json:"role,omitempty"`
 	TrainingLevel string `json:"training_level,omitempty"`
+	EmailVerified bool   `json:"email_verified,omitempty"`
 	jwt.RegisteredClaims
 }
 
@@ -46,6 +47,7 @@ func (s *service) GenerateAccessToken(user *domain.User) (string, error) {
 		Username:      user.Username,
 		Role:          string(user.Role),
 		TrainingLevel: string(user.TrainingLevel),
+		EmailVerified: user.IsEmailVerified,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    s.cfg.Issuer,
 			Subject:   user.ID.String(),
@@ -64,10 +66,11 @@ func (s *service) GenerateRefreshToken(user *domain.User) (string, string, error
 	jti := uuid.New().String()
 
 	claims := &Claims{
-		UserID:   user.ID.String(),
-		Email:    user.Email,
-		Username: user.Username,
-		Role:     string(user.Role),
+		UserID:        user.ID.String(),
+		Email:         user.Email,
+		Username:      user.Username,
+		Role:          string(user.Role),
+		EmailVerified: user.IsEmailVerified,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    s.cfg.Issuer,
 			Subject:   user.ID.String(),
