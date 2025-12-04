@@ -12,20 +12,22 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	_ "workout-app/api/swagger" // docs
 	"workout-app/internal/config"
 	"workout-app/internal/database"
+	domain "workout-app/internal/domain/user"
 	authhandler "workout-app/internal/handler/auth"
 	"workout-app/internal/handler/health"
 	"workout-app/internal/handler/middleware"
 	userhandler "workout-app/internal/handler/user"
-	domain "workout-app/internal/domain/user"
 	pgrepo "workout-app/internal/repository/postgres"
+	authuc "workout-app/internal/usecase/auth"
 	useruc "workout-app/internal/usecase/user"
-	"workout-app/pkg/logger"
 	jwtsvc "workout-app/pkg/jwt"
+	"workout-app/pkg/logger"
+
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
-	_ "workout-app/api/swagger" // docs
 )
 
 // Server представляет HTTP сервер приложения
@@ -35,10 +37,24 @@ type Server struct {
 	db         *database.DB
 	cfg        *config.Config
 
-	logger     logger.Logger
+	logger      logger.Logger
 	jwtService  jwtsvc.Service
 	authHandler *authhandler.Handler
 	userHandler *userhandler.Handler
+}
+
+// loggerEmailSender — простая реализация EmailSender, логирующая коды в логгер.
+// Используется как временное решение до внедрения полноценного почтового сервиса.
+type loggerEmailSender struct {
+	logger logger.Logger
+}
+
+func (s *loggerEmailSender) SendEmailVerificationCode(ctx context.Context, email, code string) error {
+	s.logger.Info("Email verification code sent", map[string]any{
+		"email": email,
+		"code":  code,
+	})
+	return nil
 }
 
 // NewServer создает новый экземпляр сервера
@@ -64,8 +80,20 @@ func NewServer(cfg *config.Config, db *database.DB) *Server {
 	gormDB := db.DB
 	userRepo := pgrepo.NewUserRepository(gormDB)
 	userService := useruc.NewService(userRepo)
+	emailVerifRepo := pgrepo.NewEmailVerificationRepository(gormDB)
 	s.jwtService = jwtsvc.NewService(&cfg.JWT)
-	s.authHandler = authhandler.NewHandler(userService, userRepo, s.jwtService)
+	// Временный EmailSender: логирует код в логгер. Для прод-окружения стоит заменить
+	// на полноценную интеграцию с почтовым сервисом.
+	emailSender := &loggerEmailSender{logger: s.logger}
+	authService := authuc.NewService(
+		userRepo,
+		emailVerifRepo,
+		s.jwtService,
+		emailSender,
+		15*time.Minute,
+		5,
+	)
+	s.authHandler = authhandler.NewHandler(authService)
 	s.userHandler = userhandler.NewHandler(userService, s.logger)
 
 	// Настраиваем middleware и роуты
@@ -123,6 +151,8 @@ func (s *Server) setupAuthRoutes() {
 		authGroup.POST("/register", s.authHandler.Register)
 		// POST /api/v1/auth/login — аутентификация пользователя по email/паролю.
 		authGroup.POST("/login", s.authHandler.Login)
+		// POST /api/v1/auth/verify-email — подтверждение email одноразовым кодом.
+		authGroup.POST("/verify-email", s.authHandler.VerifyEmail)
 		// POST /api/v1/auth/refresh — обновление пары access/refresh токенов по refresh-токену.
 		authGroup.POST("/refresh", s.authHandler.Refresh)
 	}

@@ -6,28 +6,21 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 
 	"workout-app/internal/handler/response"
 	repo "workout-app/internal/repository/interfaces"
-	useruc "workout-app/internal/usecase/user"
-	jwtsvc "workout-app/pkg/jwt"
-	"workout-app/pkg/password"
+	authuc "workout-app/internal/usecase/auth"
 )
 
 // Handler обрабатывает HTTP-запросы, связанные с аутентификацией.
 type Handler struct {
-	users  useruc.Service
-	repo   repo.UserRepository
-	jwt    jwtsvc.Service
+	auth authuc.Service
 }
 
 // NewHandler создаёт новый AuthHandler.
-func NewHandler(users useruc.Service, repo repo.UserRepository, jwt jwtsvc.Service) *Handler {
+func NewHandler(authSvc authuc.Service) *Handler {
 	return &Handler{
-		users: users,
-		repo:  repo,
-		jwt:   jwt,
+		auth: authSvc,
 	}
 }
 
@@ -38,7 +31,7 @@ func NewHandler(users useruc.Service, repo repo.UserRepository, jwt jwtsvc.Servi
 // @Accept       json
 // @Produce      json
 // @Param        payload  body      RegisterRequest      true  "Данные для регистрации"
-// @Success      201      {object}  LoginResponse
+// @Success      201      {object}  RegisterResponse
 // @Failure      400      {object}  response.ErrorBody
 // @Failure      409      {object}  response.ErrorBody
 // @Failure      500      {object}  response.ErrorBody
@@ -46,55 +39,31 @@ func NewHandler(users useruc.Service, repo repo.UserRepository, jwt jwtsvc.Servi
 func (h *Handler) Register(c *gin.Context) {
 	var req RegisterRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Error(c, http.StatusBadRequest, "invalid_request", "Некорректное тело запроса", err.Error())
+		response.Error(c, http.StatusBadRequest, "invalid_request", "Invalid request body", err.Error())
 		return
 	}
 
-	// Хешируем пароль
-	hash, err := password.Hash(req.Password)
-	if err != nil {
-		log.Printf("error hashing password in Register: email=%s err=%v", req.Email, err)
-		response.Error(c, http.StatusInternalServerError, "internal_error", "Внутренняя ошибка сервера", nil)
-		return
-	}
-
-	user, err := h.users.Register(c.Request.Context(), req.Email, hash, req.Username)
+	user, err := h.auth.Register(c.Request.Context(), req.Email, req.Password, req.Username)
 	if err != nil {
 		switch {
 		case errors.Is(err, repo.ErrEmailExists):
 			log.Printf("email conflict in Register: email=%s err=%v", req.Email, err)
-			response.Error(c, http.StatusConflict, "email_already_exists", "Указанный email уже используется", nil)
+			response.Error(c, http.StatusConflict, "email_already_exists", "Email is already in use", nil)
 		case errors.Is(err, repo.ErrUsernameExists):
 			log.Printf("username conflict in Register: username=%s err=%v", req.Username, err)
-			response.Error(c, http.StatusConflict, "username_already_exists", "Указанный никнейм уже используется", nil)
+			response.Error(c, http.StatusConflict, "username_already_exists", "Username is already in use", nil)
 		default:
 			log.Printf("internal error in Register: email=%s username=%s err=%v", req.Email, req.Username, err)
-			response.Error(c, http.StatusInternalServerError, "internal_error", "Внутренняя ошибка сервера", nil)
+			response.Error(c, http.StatusInternalServerError, "internal_error", "Internal server error", nil)
 		}
 		return
 	}
 
-	access, err := h.jwt.GenerateAccessToken(user)
-	if err != nil {
-		log.Printf("error generating access token in Register: user_id=%s err=%v", user.ID, err)
-		response.Error(c, http.StatusInternalServerError, "internal_error", "Внутренняя ошибка сервера", nil)
-		return
-	}
-	refresh, _, err := h.jwt.GenerateRefreshToken(user)
-	if err != nil {
-		log.Printf("error generating refresh token in Register: user_id=%s err=%v", user.ID, err)
-		response.Error(c, http.StatusInternalServerError, "internal_error", "Внутренняя ошибка сервера", nil)
-		return
-	}
-
-	resp := LoginResponse{
+	resp := RegisterResponse{
 		UserID:   user.ID.String(),
 		Email:    user.Email,
 		Username: user.Username,
-		Tokens: TokenPair{
-			AccessToken:  access,
-			RefreshToken: refresh,
-		},
+		Message:  "Verification code has been sent to your email",
 	}
 
 	c.JSON(http.StatusCreated, resp)
@@ -115,39 +84,21 @@ func (h *Handler) Register(c *gin.Context) {
 func (h *Handler) Login(c *gin.Context) {
 	var req LoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Error(c, http.StatusBadRequest, "invalid_request", "Некорректное тело запроса", err.Error())
+		response.Error(c, http.StatusBadRequest, "invalid_request", "Invalid request body", err.Error())
 		return
 	}
 
-	// Ищем пользователя по email
-	user, err := h.repo.GetByEmail(c.Request.Context(), req.Email)
+	user, access, refresh, err := h.auth.Login(c.Request.Context(), req.Email, req.Password)
 	if err != nil {
-		if errors.Is(err, repo.ErrNotFound) {
-			// Не раскрываем, что именно неверно
-			response.Error(c, http.StatusUnauthorized, "invalid_credentials", "Неверный email или пароль", nil)
-			return
+		switch {
+		case errors.Is(err, authuc.ErrInvalidCredentials):
+			response.Error(c, http.StatusUnauthorized, "invalid_credentials", "Invalid email or password", nil)
+		case errors.Is(err, authuc.ErrEmailNotVerified):
+			response.Error(c, http.StatusForbidden, "email_not_verified", "Email is not verified", nil)
+		default:
+			log.Printf("internal error in Login: email=%s err=%v", req.Email, err)
+			response.Error(c, http.StatusInternalServerError, "internal_error", "Internal server error", nil)
 		}
-		log.Printf("internal error in Login (GetByEmail): email=%s err=%v", req.Email, err)
-		response.Error(c, http.StatusInternalServerError, "internal_error", "Внутренняя ошибка сервера", nil)
-		return
-	}
-
-	// Проверяем пароль
-	if err := password.Compare(user.PasswordHash, req.Password); err != nil {
-		response.Error(c, http.StatusUnauthorized, "invalid_credentials", "Неверный email или пароль", nil)
-		return
-	}
-
-	access, err := h.jwt.GenerateAccessToken(user)
-	if err != nil {
-		log.Printf("error generating access token in Login: user_id=%s err=%v", user.ID, err)
-		response.Error(c, http.StatusInternalServerError, "internal_error", "Внутренняя ошибка сервера", nil)
-		return
-	}
-	refresh, _, err := h.jwt.GenerateRefreshToken(user)
-	if err != nil {
-		log.Printf("error generating refresh token in Login: user_id=%s err=%v", user.ID, err)
-		response.Error(c, http.StatusInternalServerError, "internal_error", "Внутренняя ошибка сервера", nil)
 		return
 	}
 
@@ -179,43 +130,21 @@ func (h *Handler) Login(c *gin.Context) {
 func (h *Handler) Refresh(c *gin.Context) {
 	var req RefreshRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Error(c, http.StatusBadRequest, "invalid_request", "Некорректное тело запроса", err.Error())
+		response.Error(c, http.StatusBadRequest, "invalid_request", "Invalid request body", err.Error())
 		return
 	}
 
-	claims, err := h.jwt.ParseRefreshToken(req.RefreshToken)
+	user, access, refresh, err := h.auth.Refresh(c.Request.Context(), req.RefreshToken)
 	if err != nil {
-		response.Error(c, http.StatusUnauthorized, "invalid_refresh_token", "Недействительный refresh-токен", nil)
-		return
-	}
-
-	userID, err := uuid.Parse(claims.UserID)
-	if err != nil {
-		response.Error(c, http.StatusUnauthorized, "invalid_refresh_token", "Недействительный refresh-токен", nil)
-		return
-	}
-
-	user, err := h.repo.GetByID(c.Request.Context(), userID)
-	if err != nil {
-		if errors.Is(err, repo.ErrNotFound) {
-			response.Error(c, http.StatusUnauthorized, "invalid_refresh_token", "Недействительный refresh-токен", nil)
-			return
+		switch {
+		case errors.Is(err, authuc.ErrInvalidRefreshToken):
+			response.Error(c, http.StatusUnauthorized, "invalid_refresh_token", "Invalid refresh token", nil)
+		case errors.Is(err, authuc.ErrEmailNotVerified):
+			response.Error(c, http.StatusForbidden, "email_not_verified", "Email is not verified", nil)
+		default:
+			log.Printf("internal error in Refresh: err=%v", err)
+			response.Error(c, http.StatusInternalServerError, "internal_error", "Internal server error", nil)
 		}
-		log.Printf("internal error in Refresh (GetByID): user_id=%s err=%v", userID, err)
-		response.Error(c, http.StatusInternalServerError, "internal_error", "Внутренняя ошибка сервера", nil)
-		return
-	}
-
-	access, err := h.jwt.GenerateAccessToken(user)
-	if err != nil {
-		log.Printf("error generating access token in Refresh: user_id=%s err=%v", user.ID, err)
-		response.Error(c, http.StatusInternalServerError, "internal_error", "Внутренняя ошибка сервера", nil)
-		return
-	}
-	refresh, _, err := h.jwt.GenerateRefreshToken(user)
-	if err != nil {
-		log.Printf("error generating refresh token in Refresh: user_id=%s err=%v", user.ID, err)
-		response.Error(c, http.StatusInternalServerError, "internal_error", "Внутренняя ошибка сервера", nil)
 		return
 	}
 
@@ -232,4 +161,53 @@ func (h *Handler) Refresh(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
+// VerifyEmail godoc
+// @Summary      Подтверждение email кодом
+// @Description  Подтверждает email пользователя по одноразовому коду и возвращает пару access/refresh токенов.
+// @Tags         auth
+// @Accept       json
+// @Produce      json
+// @Param        payload  body      VerifyEmailRequest   true  "Данные для подтверждения email"
+// @Success      200      {object}  LoginResponse
+// @Failure      400      {object}  response.ErrorBody
+// @Failure      401      {object}  response.ErrorBody
+// @Failure      403      {object}  response.ErrorBody
+// @Failure      500      {object}  response.ErrorBody
+// @Router       /api/v1/auth/verify-email [post]
+func (h *Handler) VerifyEmail(c *gin.Context) {
+	var req VerifyEmailRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, http.StatusBadRequest, "invalid_request", "Invalid request body", err.Error())
+		return
+	}
 
+	user, access, refresh, err := h.auth.VerifyEmail(c.Request.Context(), req.Email, req.Code)
+	if err != nil {
+		switch {
+		case errors.Is(err, authuc.ErrEmailAlreadyVerified):
+			response.Error(c, http.StatusConflict, "email_already_verified", "Email is already verified", nil)
+		case errors.Is(err, authuc.ErrVerificationCodeNotFound):
+			response.Error(c, http.StatusBadRequest, "verification_code_not_found", "Verification code not found or expired", nil)
+		case errors.Is(err, authuc.ErrVerificationCodeInvalid):
+			response.Error(c, http.StatusBadRequest, "verification_code_invalid", "Verification code is invalid", nil)
+		case errors.Is(err, authuc.ErrVerificationAttemptsExceeded):
+			response.Error(c, http.StatusBadRequest, "verification_attempts_exceeded", "Verification attempts limit exceeded. Please request a new code.", nil)
+		default:
+			log.Printf("internal error in VerifyEmail: email=%s err=%v", req.Email, err)
+			response.Error(c, http.StatusInternalServerError, "internal_error", "Internal server error", nil)
+		}
+		return
+	}
+
+	resp := LoginResponse{
+		UserID:   user.ID.String(),
+		Email:    user.Email,
+		Username: user.Username,
+		Tokens: TokenPair{
+			AccessToken:  access,
+			RefreshToken: refresh,
+		},
+	}
+
+	c.JSON(http.StatusOK, resp)
+}

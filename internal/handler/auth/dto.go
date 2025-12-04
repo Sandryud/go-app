@@ -9,10 +9,24 @@ type RegisterRequest struct {
 	Username string `json:"username" binding:"required,alphanum,min=3,max=32"`
 }
 
+// RegisterResponse описывает ответ при успешной регистрации (отправке кода подтверждения).
+type RegisterResponse struct {
+	UserID   string `json:"user_id"`
+	Email    string `json:"email"`
+	Username string `json:"username"`
+	Message  string `json:"message"`
+}
+
 // LoginRequest описывает тело запроса логина.
 type LoginRequest struct {
 	Email    string `json:"email" binding:"required,email"`
 	Password string `json:"password" binding:"required"`
+}
+
+// VerifyEmailRequest описывает тело запроса подтверждения email кодом.
+type VerifyEmailRequest struct {
+	Email string `json:"email" binding:"required,email"`
+	Code  string `json:"code" binding:"required,len=6"`
 }
 
 // TokenPair описывает пару access/refresh токенов.

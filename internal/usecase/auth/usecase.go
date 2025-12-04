@@ -7,6 +7,8 @@ import (
 	"math/big"
 	"time"
 
+	"github.com/google/uuid"
+
 	domain "workout-app/internal/domain/user"
 	repo "workout-app/internal/repository/interfaces"
 	jwtsvc "workout-app/pkg/jwt"
@@ -32,6 +34,9 @@ type Service interface {
 	// Login выполняет вход по email/паролю, проверяя, что email подтверждён.
 	// Возвращает пользователя и пару access/refresh токенов.
 	Login(ctx context.Context, email, password string) (*domain.User, string, string, error)
+
+	// Refresh обновляет пару access/refresh токенов по действительному refresh-токену.
+	Refresh(ctx context.Context, refreshToken string) (*domain.User, string, string, error)
 }
 
 // Ошибки бизнес-логики usecase-слоя.
@@ -42,7 +47,10 @@ var (
 	ErrVerificationAttemptsExceeded = fmt.Errorf("verification attempts exceeded")
 	ErrEmailNotVerified             = fmt.Errorf("email not verified")
 	ErrInvalidCredentials           = fmt.Errorf("invalid email or password")
+	ErrInvalidRefreshToken          = fmt.Errorf("invalid refresh token")
 )
+
+const verificationCodeLength = 6
 
 type service struct {
 	users           repo.UserRepository
@@ -94,7 +102,7 @@ func (s *service) Register(ctx context.Context, email, rawPassword, username str
 	}
 
 	// Генерируем одноразовый код и его хэш.
-	code, err := generateNumericCode(6)
+	code, err := generateNumericCode(verificationCodeLength)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate verification code: %w", err)
 	}
@@ -213,6 +221,53 @@ func (s *service) Login(ctx context.Context, email, rawPassword string) (*domain
 		return nil, "", "", ErrInvalidCredentials
 	}
 
+	if !user.IsEmailVerified {
+		return nil, "", "", ErrEmailNotVerified
+	}
+
+	access, err := s.jwt.GenerateAccessToken(user)
+	if err != nil {
+		return nil, "", "", err
+	}
+
+	refresh, _, err := s.jwt.GenerateRefreshToken(user)
+	if err != nil {
+		return nil, "", "", err
+	}
+
+	return user, access, refresh, nil
+}
+
+// Refresh обновляет пару access/refresh токенов по действительному refresh-токену.
+func (s *service) Refresh(ctx context.Context, refreshToken string) (*domain.User, string, string, error) {
+	if refreshToken == "" {
+		return nil, "", "", fmt.Errorf("refresh token is required")
+	}
+
+	claims, err := s.jwt.ParseRefreshToken(refreshToken)
+	if err != nil {
+		return nil, "", "", ErrInvalidRefreshToken
+	}
+
+	userID, err := uuid.Parse(claims.UserID)
+	if err != nil {
+		return nil, "", "", ErrInvalidRefreshToken
+	}
+
+	user, err := s.users.GetByID(ctx, userID)
+	if err != nil {
+		if err == repo.ErrNotFound {
+			return nil, "", "", ErrInvalidRefreshToken
+		}
+		return nil, "", "", err
+	}
+
+	// Не выдаём новые токены для мягко удалённых пользователей.
+	if user.IsDeleted() {
+		return nil, "", "", ErrInvalidRefreshToken
+	}
+
+	// Не выдаём новые токены, если email не подтверждён.
 	if !user.IsEmailVerified {
 		return nil, "", "", ErrEmailNotVerified
 	}
