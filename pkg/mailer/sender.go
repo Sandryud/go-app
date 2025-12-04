@@ -6,4 +6,3 @@ import "context"
 type EmailSender interface {
 	SendEmailVerificationCode(ctx context.Context, email, code string) error
 }
-

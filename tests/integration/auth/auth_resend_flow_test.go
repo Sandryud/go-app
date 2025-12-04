@@ -37,7 +37,7 @@ func TestAuth_Register_Resend_Verify_Login(t *testing.T) {
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &regResp))
 	require.Equal(t, email, regResp.Email)
 
-	// 2. Resend verification
+	// 2. Повторная отправка кода подтверждения
 	resendBody := `{"email":"` + email + `"}`
 	w = httptest.NewRecorder()
 	req = httptest.NewRequest(http.MethodPost, "/api/v1/auth/resend-verification", strings.NewReader(resendBody))
@@ -48,7 +48,7 @@ func TestAuth_Register_Resend_Verify_Login(t *testing.T) {
 	// 3. Форсируем подтверждение email для успешного логина.
 	testcfg.VerifyUserEmailForTests(t, email)
 
-	// 4. Login
+	// 4. Вход в систему
 	loginBody := `{"email":"` + email + `","password":"Password123!"}`
 	w = httptest.NewRecorder()
 	req = httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", strings.NewReader(loginBody))
@@ -86,7 +86,7 @@ func TestAuth_Verify_ExpiredCode_Resend_Verify(t *testing.T) {
 	// Ждём истечения TTL
 	time.Sleep(2 * time.Second)
 
-	// 2. Попытка verify с любым кодом должна дать expired/not found.
+	// 2. Попытка подтверждения с любым кодом должна дать expired/not found.
 	verifyBody := `{"email":"` + email + `","code":"000000"}`
 	w = httptest.NewRecorder()
 	req = httptest.NewRequest(http.MethodPost, "/api/v1/auth/verify-email", strings.NewReader(verifyBody))
@@ -94,7 +94,7 @@ func TestAuth_Verify_ExpiredCode_Resend_Verify(t *testing.T) {
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
 
-	// 3. Resend verification
+	// 3. Повторная отправка кода подтверждения
 	resendBody := `{"email":"` + email + `"}`
 	w = httptest.NewRecorder()
 	req = httptest.NewRequest(http.MethodPost, "/api/v1/auth/resend-verification", strings.NewReader(resendBody))
@@ -127,14 +127,14 @@ func TestAuth_Verify_MaxAttempts_Resend_Verify(t *testing.T) {
 		router.ServeHTTP(w, req)
 
 		if i < 4 {
-			require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String(), "expected invalid code before max attempts")
+			require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String(), "ожидалась ошибка неверного кода до превышения лимита попыток")
 		} else {
 			// На последней попытке ожидаем ошибку превышения попыток (также 400).
 			require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
 		}
 	}
 
-	// 3. Resend verification должен сработать и восстановить возможность подтверждения.
+	// 3. Повторная отправка кода подтверждения должна сработать и восстановить возможность подтверждения.
 	resendBody := `{"email":"` + email + `"}`
 	w = httptest.NewRecorder()
 	req = httptest.NewRequest(http.MethodPost, "/api/v1/auth/resend-verification", strings.NewReader(resendBody))
@@ -142,5 +142,3 @@ func TestAuth_Verify_MaxAttempts_Resend_Verify(t *testing.T) {
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 }
-
-

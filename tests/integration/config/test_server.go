@@ -98,3 +98,20 @@ func VerifyUserEmailForTests(t *testing.T, email string) {
 		t.Fatalf("failed to verify user email in tests: %v", err)
 	}
 }
+
+// ForceEmailChangeForTests принудительно изменяет email пользователя в БД
+// для интеграционных тестов, где код из письма недоступен.
+func ForceEmailChangeForTests(t *testing.T, userID, newEmail string) {
+	t.Helper()
+	if testDB == nil {
+		t.Fatalf("test database is not initialized")
+	}
+	// Удаляем коды верификации
+	if err := testDB.Exec(`DELETE FROM email_verifications WHERE user_id = $1`, userID).Error; err != nil {
+		t.Fatalf("failed to delete verification codes: %v", err)
+	}
+	// Обновляем email и помечаем как подтверждённый
+	if err := testDB.Exec(`UPDATE users SET email = $1, is_email_verified = TRUE WHERE id = $2`, newEmail, userID).Error; err != nil {
+		t.Fatalf("failed to change user email in tests: %v", err)
+	}
+}
