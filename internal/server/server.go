@@ -20,10 +20,11 @@ import (
 	"workout-app/internal/handler/health"
 	"workout-app/internal/handler/middleware"
 	userhandler "workout-app/internal/handler/user"
+	"workout-app/internal/mailer"
 	pgrepo "workout-app/internal/repository/postgres"
 	authuc "workout-app/internal/usecase/auth"
 	useruc "workout-app/internal/usecase/user"
-	jwtsvc "workout-app/pkg/jwt"
+	"workout-app/pkg/jwt"
 	"workout-app/pkg/logger"
 
 	swaggerFiles "github.com/swaggo/files"
@@ -38,7 +39,7 @@ type Server struct {
 	cfg        *config.Config
 
 	logger      logger.Logger
-	jwtService  jwtsvc.Service
+	jwtService  jwt.Service
 	authHandler *authhandler.Handler
 	userHandler *userhandler.Handler
 }
@@ -81,17 +82,23 @@ func NewServer(cfg *config.Config, db *database.DB) *Server {
 	userRepo := pgrepo.NewUserRepository(gormDB)
 	userService := useruc.NewService(userRepo)
 	emailVerifRepo := pgrepo.NewEmailVerificationRepository(gormDB)
-	s.jwtService = jwtsvc.NewService(&cfg.JWT)
-	// Временный EmailSender: логирует код в логгер. Для прод-окружения стоит заменить
-	// на полноценную интеграцию с почтовым сервисом.
-	emailSender := &loggerEmailSender{logger: s.logger}
+	s.jwtService = jwt.NewService(&cfg.JWT)
+
+	var emailSender authuc.EmailSender
+	if cfg.Email.SMTPHost != "" {
+		emailSender = mailer.NewSMTPSender(&cfg.Email, s.logger)
+	} else {
+		// Фолбэк: логируем коды в лог вместо реальной отправки писем.
+		emailSender = &loggerEmailSender{logger: s.logger}
+	}
 	authService := authuc.NewService(
 		userRepo,
 		emailVerifRepo,
 		s.jwtService,
 		emailSender,
-		15*time.Minute,
-		5,
+		cfg.Email.VerificationTTL,
+		cfg.Email.VerificationMaxAttempts,
+		cfg.Email.VerificationCodeLength,
 	)
 	s.authHandler = authhandler.NewHandler(authService)
 	s.userHandler = userhandler.NewHandler(userService, s.logger)

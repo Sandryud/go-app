@@ -16,6 +16,7 @@ type Config struct {
 	Database DatabaseConfig
 	CORS     CORSConfig
 	JWT      JWTConfig
+	Email    EmailConfig
 	AppEnv   string // Окружение приложения: development, production, etc.
 }
 
@@ -56,6 +57,18 @@ type JWTConfig struct {
 	AccessTTL     time.Duration // Время жизни access-токена
 	RefreshTTL    time.Duration // Время жизни refresh-токена
 	Issuer        string        // Issuer (iss) для токенов
+}
+
+// EmailConfig хранит конфигурацию для отправки email и параметров верификации.
+type EmailConfig struct {
+	SMTPHost                string        // SMTP host
+	SMTPPort                int           // SMTP port
+	SMTPUsername            string        // SMTP username
+	SMTPPassword            string        // SMTP password
+	FromEmail               string        // From email address
+	VerificationTTL         time.Duration // Время жизни кода подтверждения email
+	VerificationMaxAttempts int           // Максимальное количество попыток ввода кода
+	VerificationCodeLength  int           // Длина кода подтверждения email
 }
 
 // DSN возвращает строку подключения к базе данных
@@ -107,12 +120,24 @@ func Load() (*Config, error) {
 		Issuer:        getEnv("JWT_ISSUER", "workout-app"),
 	}
 
+	// Загружаем конфигурацию Email/verification
+	cfg.Email = EmailConfig{
+		SMTPHost:                getEnv("EMAIL_SMTP_HOST", ""),
+		SMTPPort:                getEnvAsInt("EMAIL_SMTP_PORT", 587),
+		SMTPUsername:            getEnv("EMAIL_SMTP_USER", ""),
+		SMTPPassword:            getEnv("EMAIL_SMTP_PASSWORD", ""),
+		FromEmail:               getEnv("EMAIL_FROM", ""),
+		VerificationTTL:         getEnvAsDuration("EMAIL_VERIFICATION_TTL", 15*time.Minute),
+		VerificationMaxAttempts: getEnvAsInt("EMAIL_VERIFICATION_MAX_ATTEMPTS", 5),
+		VerificationCodeLength:  getEnvAsInt("EMAIL_VERIFICATION_CODE_LENGTH", 6),
+	}
+
 	// Загружаем конфигурацию CORS
 	cfg.CORS = loadCORSConfig(cfg.AppEnv)
 
 	// Валидируем конфигурацию
 	if err := cfg.Validate(); err != nil {
-		return nil, fmt.Errorf("ошибка валидации конфигурации: %w", err)
+		return nil, fmt.Errorf("configuration validation error: %w", err)
 	}
 
 	return cfg, nil
@@ -121,25 +146,51 @@ func Load() (*Config, error) {
 // Validate проверяет корректность конфигурации
 func (c *Config) Validate() error {
 	if c.Server.Host == "" {
-		return fmt.Errorf("SERVER_HOST не может быть пустым")
+		return fmt.Errorf("SERVER_HOST must not be empty")
 	}
 	if c.Server.Port == "" {
-		return fmt.Errorf("SERVER_PORT не может быть пустым")
+		return fmt.Errorf("SERVER_PORT must not be empty")
 	}
 	if c.Database.Host == "" {
-		return fmt.Errorf("DB_HOST не может быть пустым")
+		return fmt.Errorf("DB_HOST must not be empty")
 	}
 	if c.Database.User == "" {
-		return fmt.Errorf("DB_USER не может быть пустым")
+		return fmt.Errorf("DB_USER must not be empty")
 	}
 	if c.Database.DBName == "" {
-		return fmt.Errorf("DB_NAME не может быть пустым")
+		return fmt.Errorf("DB_NAME must not be empty")
 	}
 	if c.JWT.AccessSecret == "" {
-		return fmt.Errorf("JWT_ACCESS_SECRET не может быть пустым")
+		return fmt.Errorf("JWT_ACCESS_SECRET must not be empty")
 	}
 	if c.JWT.RefreshSecret == "" {
-		return fmt.Errorf("JWT_REFRESH_SECRET не может быть пустым")
+		return fmt.Errorf("JWT_REFRESH_SECRET must not be empty")
+	}
+
+	// Валидация email/verification настроек.
+	// SMTP блок считается "выключенным", если не задан EMAIL_SMTP_HOST.
+	if c.Email.SMTPHost != "" {
+		if c.Email.SMTPPort <= 0 {
+			return fmt.Errorf("EMAIL_SMTP_PORT must be positive")
+		}
+		if c.Email.SMTPUsername == "" {
+			return fmt.Errorf("EMAIL_SMTP_USER must be set when EMAIL_SMTP_HOST is set")
+		}
+		if c.Email.SMTPPassword == "" {
+			return fmt.Errorf("EMAIL_SMTP_PASSWORD must be set when EMAIL_SMTP_HOST is set")
+		}
+		if c.Email.FromEmail == "" {
+			return fmt.Errorf("EMAIL_FROM must be set when EMAIL_SMTP_HOST is set")
+		}
+	}
+	if c.Email.VerificationTTL <= 0 {
+		return fmt.Errorf("EMAIL_VERIFICATION_TTL must be positive")
+	}
+	if c.Email.VerificationMaxAttempts <= 0 {
+		return fmt.Errorf("EMAIL_VERIFICATION_MAX_ATTEMPTS must be positive")
+	}
+	if c.Email.VerificationCodeLength <= 0 {
+		return fmt.Errorf("EMAIL_VERIFICATION_CODE_LENGTH must be positive")
 	}
 	return nil
 }

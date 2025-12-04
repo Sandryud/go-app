@@ -21,7 +21,7 @@ type EmailSender interface {
 }
 
 // Service описывает usecase-слой, связанный с аутентификацией:
-// регистрацию, подтверждение email и логин.
+// регистрацию, подтверждение email, логин и refresh токенов.
 type Service interface {
 	// Register регистрирует пользователя, создаёт код подтверждения email и отправляет его.
 	// Возвращает созданного пользователя (без токенов).
@@ -50,8 +50,6 @@ var (
 	ErrInvalidRefreshToken          = fmt.Errorf("invalid refresh token")
 )
 
-const verificationCodeLength = 6
-
 type service struct {
 	users           repo.UserRepository
 	emailVerifs     repo.EmailVerificationRepository
@@ -59,6 +57,7 @@ type service struct {
 	emailSender     EmailSender
 	verificationTTL time.Duration
 	maxAttempts     int
+	codeLength      int
 }
 
 // NewService создаёт новый auth usecase-сервис.
@@ -71,6 +70,7 @@ func NewService(
 	emailSender EmailSender,
 	verificationTTL time.Duration,
 	maxAttempts int,
+	codeLength int,
 ) Service {
 	return &service{
 		users:           users,
@@ -79,6 +79,7 @@ func NewService(
 		emailSender:     emailSender,
 		verificationTTL: verificationTTL,
 		maxAttempts:     maxAttempts,
+		codeLength:      codeLength,
 	}
 }
 
@@ -102,7 +103,7 @@ func (s *service) Register(ctx context.Context, email, rawPassword, username str
 	}
 
 	// Генерируем одноразовый код и его хэш.
-	code, err := generateNumericCode(verificationCodeLength)
+	code, err := generateNumericCode(s.codeLength)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate verification code: %w", err)
 	}
