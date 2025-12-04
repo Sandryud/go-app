@@ -41,7 +41,8 @@ type User struct {
 	AvatarURL string     // URL аватара (опционально)
 	Role      Role       // Роль (user/coach/admin и т.п.)
 
-	TrainingLevel TrainingLevel // Уровень подготовки
+	TrainingLevel   TrainingLevel // Уровень подготовки
+	IsEmailVerified bool          // Подтверждён ли email пользователя
 
 	CreatedAt time.Time  // Время создания
 	UpdatedAt time.Time  // Время последнего обновления
@@ -84,5 +85,16 @@ func (u *User) MarkDeleted(at time.Time) {
 func (u *User) Touch(at time.Time) {
 	u.UpdatedAt = at
 }
+
+// EmailVerification представляет доменную модель кода подтверждения email.
+type EmailVerification struct {
+	UserID      uuid.UUID // Пользователь, для которого создан код
+	CodeHash    string    // Хэш одноразового кода подтверждения
+	ExpiresAt   time.Time // Время истечения кода
+	Attempts    int       // Количество использованных попыток
+	MaxAttempts int       // Максимально допустимое количество попыток
+	CreatedAt   time.Time // Время создания записи
+}
+
 
 
