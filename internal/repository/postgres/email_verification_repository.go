@@ -118,6 +118,41 @@ func (r *EmailVerificationRepository) GetActiveByUserIDAndNewEmail(ctx context.C
 	return model.toDomain()
 }
 
+// GetActiveEmailChangeByUserID возвращает активную (не истекшую) запись изменения email по user_id.
+func (r *EmailVerificationRepository) GetActiveEmailChangeByUserID(ctx context.Context, userID uuid.UUID) (*domain.EmailVerification, error) {
+	var model pgEmailVerification
+
+	err := r.db.WithContext(ctx).
+		Where("user_id = ? AND new_email IS NOT NULL AND expires_at > NOW()", userID.String()).
+		Order("created_at DESC").
+		Take(&model).Error
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, repo.ErrNotFound
+		}
+		return nil, err
+	}
+
+	return model.toDomain()
+}
+
+// GetByID возвращает запись верификации по её ID.
+func (r *EmailVerificationRepository) GetByID(ctx context.Context, id int64) (*domain.EmailVerification, error) {
+	var model pgEmailVerification
+
+	err := r.db.WithContext(ctx).
+		Where("id = ?", id).
+		Take(&model).Error
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, repo.ErrNotFound
+		}
+		return nil, err
+	}
+
+	return model.toDomain()
+}
+
 // IncrementAttempts увеличивает счетчик попыток для записи по её ID.
 func (r *EmailVerificationRepository) IncrementAttempts(ctx context.Context, id int64) error {
 	result := r.db.WithContext(ctx).
@@ -138,6 +173,18 @@ func (r *EmailVerificationRepository) IncrementAttempts(ctx context.Context, id 
 func (r *EmailVerificationRepository) DeleteByUserID(ctx context.Context, userID uuid.UUID) error {
 	result := r.db.WithContext(ctx).
 		Where("user_id = ?", userID.String()).
+		Delete(&pgEmailVerification{})
+
+	if result.Error != nil {
+		return result.Error
+	}
+	return nil
+}
+
+// DeleteEmailChangeByUserID удаляет все записи кодов изменения email для указанного пользователя.
+func (r *EmailVerificationRepository) DeleteEmailChangeByUserID(ctx context.Context, userID uuid.UUID) error {
+	result := r.db.WithContext(ctx).
+		Where("user_id = ? AND new_email IS NOT NULL", userID.String()).
 		Delete(&pgEmailVerification{})
 
 	if result.Error != nil {

@@ -2,10 +2,8 @@ package auth
 
 import (
 	"context"
-	"crypto/rand"
 	"errors"
 	"fmt"
-	"math/big"
 	"time"
 
 	"github.com/google/uuid"
@@ -13,13 +11,10 @@ import (
 	domain "workout-app/internal/domain/user"
 	repo "workout-app/internal/repository/interfaces"
 	jwtsvc "workout-app/pkg/jwt"
+	"workout-app/pkg/mailer"
 	"workout-app/pkg/password"
+	"workout-app/pkg/verification"
 )
-
-// EmailSender описывает контракт для отправки кода подтверждения email.
-type EmailSender interface {
-	SendEmailVerificationCode(ctx context.Context, email, code string) error
-}
 
 // Service описывает usecase-слой, связанный с аутентификацией:
 // регистрацию, подтверждение email, логин и refresh токенов.
@@ -60,7 +55,7 @@ type service struct {
 	users           repo.UserRepository
 	emailVerifs     repo.EmailVerificationRepository
 	jwt             jwtsvc.Service
-	emailSender     EmailSender
+	emailSender     mailer.EmailSender
 	verificationTTL time.Duration
 	maxAttempts     int
 	codeLength      int
@@ -73,7 +68,7 @@ func NewService(
 	users repo.UserRepository,
 	emailVerifs repo.EmailVerificationRepository,
 	jwt jwtsvc.Service,
-	emailSender EmailSender,
+	emailSender mailer.EmailSender,
 	verificationTTL time.Duration,
 	maxAttempts int,
 	codeLength int,
@@ -152,25 +147,29 @@ func (s *service) VerifyEmail(ctx context.Context, email, code string) (*domain.
 		return nil, "", "", err
 	}
 
-	// Проверим TTL на всякий случай (репозиторий уже фильтрует по expires_at > now).
-	if time.Now().UTC().After(v.ExpiresAt) {
-		_ = s.emailVerifs.DeleteByUserID(ctx, user.ID)
-		return nil, "", "", ErrVerificationCodeNotFound
+	// Используем общую функцию проверки кода
+	result, _, err := verification.VerifyCode(ctx, v, code, s.emailVerifs)
+	if err != nil {
+		return nil, "", "", fmt.Errorf("failed to verify code: %w", err)
 	}
 
-	// Сравниваем код по хэшу.
-	if err := password.Compare(v.CodeHash, code); err != nil {
-		newAttempts := v.Attempts + 1
-
-		// Увеличиваем количество попыток.
-		_ = s.emailVerifs.IncrementAttempts(ctx, v.ID)
-
-		if newAttempts >= v.MaxAttempts {
-			_ = s.emailVerifs.DeleteByUserID(ctx, user.ID)
-			return nil, "", "", ErrVerificationAttemptsExceeded
+	switch result {
+	case verification.VerificationExpired:
+		if err := s.emailVerifs.DeleteByUserID(ctx, user.ID); err != nil {
+			return nil, "", "", fmt.Errorf("failed to delete expired verification: %w", err)
 		}
-
+		return nil, "", "", ErrVerificationCodeNotFound
+	case verification.VerificationAttemptsExceeded:
+		if err := s.emailVerifs.DeleteByUserID(ctx, user.ID); err != nil {
+			return nil, "", "", fmt.Errorf("failed to delete verification after exceeded attempts: %w", err)
+		}
+		return nil, "", "", ErrVerificationAttemptsExceeded
+	case verification.VerificationCodeInvalid:
 		return nil, "", "", ErrVerificationCodeInvalid
+	case verification.VerificationSuccess:
+		// Продолжаем обработку успешной верификации
+	default:
+		return nil, "", "", fmt.Errorf("unknown verification result: %d", result)
 	}
 
 	// Успешное подтверждение: отмечаем email как подтверждённый.
@@ -182,7 +181,9 @@ func (s *service) VerifyEmail(ctx context.Context, email, code string) (*domain.
 	}
 
 	// Удаляем все коды для пользователя.
-	_ = s.emailVerifs.DeleteByUserID(ctx, user.ID)
+	if err := s.emailVerifs.DeleteByUserID(ctx, user.ID); err != nil {
+		return nil, "", "", fmt.Errorf("failed to delete verification codes: %w", err)
+	}
 
 	// Генерируем access/refresh токены.
 	access, err := s.jwt.GenerateAccessToken(user)
@@ -312,7 +313,7 @@ func (s *service) ResendVerificationCode(ctx context.Context, email string) erro
 // createAndSendVerificationCode создаёт запись с кодом подтверждения email
 // и отправляет его пользователю.
 func (s *service) createAndSendVerificationCode(ctx context.Context, user *domain.User) error {
-	code, err := generateNumericCode(s.codeLength)
+	code, err := verification.GenerateNumericCode(s.codeLength)
 	if err != nil {
 		return fmt.Errorf("failed to generate verification code: %w", err)
 	}
@@ -341,26 +342,4 @@ func (s *service) createAndSendVerificationCode(ctx context.Context, user *domai
 	}
 
 	return nil
-}
-
-// generateNumericCode генерирует криптографически стойкий числовой код заданной длины.
-func generateNumericCode(length int) (string, error) {
-	const digits = "0123456789"
-
-	if length <= 0 {
-		return "", fmt.Errorf("length must be positive")
-	}
-
-	code := make([]byte, length)
-	max := big.NewInt(int64(len(digits)))
-
-	for i := 0; i < length; i++ {
-		n, err := rand.Int(rand.Reader, max)
-		if err != nil {
-			return "", err
-		}
-		code[i] = digits[n.Int64()]
-	}
-
-	return string(code), nil
 }
