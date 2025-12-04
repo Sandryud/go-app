@@ -29,10 +29,10 @@ const (
 // Важно: эта модель описывает бизнес‑сущность и не зависит от деталей транспорта (HTTP, gRPC)
 // и конкретного представления в БД.
 type User struct {
-	ID           uuid.UUID    // Уникальный идентификатор пользователя
-	Email        string       // Email (уникальный логин)
-	PasswordHash string       // Хэш пароля
-	Username     string       // Никнейм (уникальный)
+	ID           uuid.UUID // Уникальный идентификатор пользователя
+	Email        string    // Email (уникальный логин)
+	PasswordHash string    // Хэш пароля
+	Username     string    // Никнейм (уникальный)
 
 	FirstName string     // Имя
 	LastName  string     // Фамилия
@@ -59,14 +59,14 @@ func NewUser(
 ) *User {
 	now := time.Now().UTC()
 	return &User{
-		ID:           uuid.New(),
-		Email:        email,
-		PasswordHash: passwordHash,
-		Username:     username,
-		Role:         RoleUser,
+		ID:            uuid.New(),
+		Email:         email,
+		PasswordHash:  passwordHash,
+		Username:      username,
+		Role:          RoleUser,
 		TrainingLevel: TrainingLevelBeginner,
-		CreatedAt:    now,
-		UpdatedAt:    now,
+		CreatedAt:     now,
+		UpdatedAt:     now,
 	}
 }
 
@@ -88,6 +88,7 @@ func (u *User) Touch(at time.Time) {
 
 // EmailVerification представляет доменную модель кода подтверждения email.
 type EmailVerification struct {
+	ID          int64     // Идентификатор записи (соответствует BIGSERIAL в БД)
 	UserID      uuid.UUID // Пользователь, для которого создан код
 	CodeHash    string    // Хэш одноразового кода подтверждения
 	ExpiresAt   time.Time // Время истечения кода
@@ -95,6 +96,3 @@ type EmailVerification struct {
 	MaxAttempts int       // Максимально допустимое количество попыток
 	CreatedAt   time.Time // Время создания записи
 }
-
-
-

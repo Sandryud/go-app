@@ -17,20 +17,21 @@ import (
 // pgUser представляет собой ORM-модель для таблицы users.
 // Она максимально близко отражает схему БД и маппится в доменную модель User.
 type pgUser struct {
-	ID            string    `gorm:"column:id;type:uuid;primaryKey"`
-	Email         string    `gorm:"column:email;type:varchar(255);not null"`
-	PasswordHash  string    `gorm:"column:password_hash;type:varchar(255);not null"`
-	Username      string    `gorm:"column:username;type:varchar(50);not null"`
-	FirstName     string    `gorm:"column:first_name;type:varchar(100)"`
-	LastName      string    `gorm:"column:last_name;type:varchar(100)"`
-	BirthDate     *time.Time `gorm:"column:birth_date;type:date"`
-	Gender        string    `gorm:"column:gender;type:text"`
-	AvatarURL     string    `gorm:"column:avatar_url;type:text"`
-	Role          string    `gorm:"column:role;type:text;not null"`
-	TrainingLevel string    `gorm:"column:training_level;type:text;not null"`
-	CreatedAt     time.Time `gorm:"column:created_at;type:timestamptz;not null"`
-	UpdatedAt     time.Time `gorm:"column:updated_at;type:timestamptz;not null"`
-	DeletedAt     *time.Time `gorm:"column:deleted_at;type:timestamptz"`
+	ID              string     `gorm:"column:id;type:uuid;primaryKey"`
+	Email           string     `gorm:"column:email;type:varchar(255);not null"`
+	PasswordHash    string     `gorm:"column:password_hash;type:varchar(255);not null"`
+	Username        string     `gorm:"column:username;type:varchar(50);not null"`
+	FirstName       string     `gorm:"column:first_name;type:varchar(100)"`
+	LastName        string     `gorm:"column:last_name;type:varchar(100)"`
+	BirthDate       *time.Time `gorm:"column:birth_date;type:date"`
+	Gender          string     `gorm:"column:gender;type:text"`
+	AvatarURL       string     `gorm:"column:avatar_url;type:text"`
+	Role            string     `gorm:"column:role;type:text;not null"`
+	TrainingLevel   string     `gorm:"column:training_level;type:text;not null"`
+	IsEmailVerified bool       `gorm:"column:is_email_verified;type:boolean;not null"`
+	CreatedAt       time.Time  `gorm:"column:created_at;type:timestamptz;not null"`
+	UpdatedAt       time.Time  `gorm:"column:updated_at;type:timestamptz;not null"`
+	DeletedAt       *time.Time `gorm:"column:deleted_at;type:timestamptz"`
 }
 
 func (pgUser) TableName() string {
@@ -100,40 +101,42 @@ func (m *pgUser) toDomain() (*domain.User, error) {
 	}
 
 	return &domain.User{
-		ID:            id,
-		Email:         m.Email,
-		PasswordHash:  m.PasswordHash,
-		Username:      m.Username,
-		FirstName:     m.FirstName,
-		LastName:      m.LastName,
-		BirthDate:     m.BirthDate,
-		Gender:        m.Gender,
-		AvatarURL:     m.AvatarURL,
-		Role:          domain.Role(m.Role),
-		TrainingLevel: domain.TrainingLevel(m.TrainingLevel),
-		CreatedAt:     m.CreatedAt,
-		UpdatedAt:     m.UpdatedAt,
-		DeletedAt:     m.DeletedAt,
+		ID:              id,
+		Email:           m.Email,
+		PasswordHash:    m.PasswordHash,
+		Username:        m.Username,
+		FirstName:       m.FirstName,
+		LastName:        m.LastName,
+		BirthDate:       m.BirthDate,
+		Gender:          m.Gender,
+		AvatarURL:       m.AvatarURL,
+		Role:            domain.Role(m.Role),
+		TrainingLevel:   domain.TrainingLevel(m.TrainingLevel),
+		IsEmailVerified: m.IsEmailVerified,
+		CreatedAt:       m.CreatedAt,
+		UpdatedAt:       m.UpdatedAt,
+		DeletedAt:       m.DeletedAt,
 	}, nil
 }
 
 // fromDomain маппит доменную модель в ORM-модель.
 func fromDomain(u *domain.User) *pgUser {
 	return &pgUser{
-		ID:            u.ID.String(),
-		Email:         u.Email,
-		PasswordHash:  u.PasswordHash,
-		Username:      u.Username,
-		FirstName:     u.FirstName,
-		LastName:      u.LastName,
-		BirthDate:     u.BirthDate,
-		Gender:        u.Gender,
-		AvatarURL:     u.AvatarURL,
-		Role:          string(u.Role),
-		TrainingLevel: string(u.TrainingLevel),
-		CreatedAt:     u.CreatedAt,
-		UpdatedAt:     u.UpdatedAt,
-		DeletedAt:     u.DeletedAt,
+		ID:              u.ID.String(),
+		Email:           u.Email,
+		PasswordHash:    u.PasswordHash,
+		Username:        u.Username,
+		FirstName:       u.FirstName,
+		LastName:        u.LastName,
+		BirthDate:       u.BirthDate,
+		Gender:          u.Gender,
+		AvatarURL:       u.AvatarURL,
+		Role:            string(u.Role),
+		TrainingLevel:   string(u.TrainingLevel),
+		IsEmailVerified: u.IsEmailVerified,
+		CreatedAt:       u.CreatedAt,
+		UpdatedAt:       u.UpdatedAt,
+		DeletedAt:       u.DeletedAt,
 	}
 }
 
@@ -213,26 +216,27 @@ func (r *UserRepository) List(ctx context.Context) ([]*domain.User, error) {
 // Не обновляет защищенные поля: id, created_at, password_hash.
 func (r *UserRepository) Update(ctx context.Context, user *domain.User) error {
 	model := fromDomain(user)
-	
+
 	// Используем выборочное обновление для защиты критичных полей
 	updates := map[string]interface{}{
-		"email":          model.Email,
-		"username":       model.Username,
-		"first_name":     model.FirstName,
-		"last_name":      model.LastName,
-		"birth_date":     model.BirthDate,
-		"gender":         model.Gender,
-		"avatar_url":     model.AvatarURL,
-		"role":           model.Role,
-		"training_level": model.TrainingLevel,
+		"email":             model.Email,
+		"username":          model.Username,
+		"first_name":        model.FirstName,
+		"last_name":         model.LastName,
+		"birth_date":        model.BirthDate,
+		"gender":            model.Gender,
+		"avatar_url":        model.AvatarURL,
+		"role":              model.Role,
+		"training_level":    model.TrainingLevel,
+		"is_email_verified": model.IsEmailVerified,
 		// updated_at обновляется на стороне БД триггером update_users_updated_at
 	}
-	
+
 	result := r.db.WithContext(ctx).
 		Model(&pgUser{}).
 		Where("id = ? AND deleted_at IS NULL", model.ID).
 		Updates(updates)
-	
+
 	if result.Error != nil {
 		// Проверка на нарушение уникальности при обновлении
 		if isUniqueViolation(result.Error, "idx_users_email_unique") || strings.Contains(result.Error.Error(), "idx_users_email_unique") {
@@ -248,7 +252,7 @@ func (r *UserRepository) Update(ctx context.Context, user *domain.User) error {
 	if result.RowsAffected == 0 {
 		return repo.ErrNotFound
 	}
-	
+
 	return nil
 }
 
@@ -256,7 +260,7 @@ func (r *UserRepository) Update(ctx context.Context, user *domain.User) error {
 // Синхронизировано с доменным методом MarkDeleted (также обновляет updated_at).
 func (r *UserRepository) SoftDelete(ctx context.Context, id uuid.UUID) error {
 	now := time.Now().UTC()
-	
+
 	// Обновляем deleted_at и updated_at синхронно с доменной логикой MarkDeleted
 	result := r.db.WithContext(ctx).
 		Model(&pgUser{}).
@@ -265,17 +269,15 @@ func (r *UserRepository) SoftDelete(ctx context.Context, id uuid.UUID) error {
 			"deleted_at": now,
 			"updated_at": now,
 		})
-	
+
 	if result.Error != nil {
 		return result.Error
 	}
-	
+
 	// Проверяем, была ли обновлена хотя бы одна запись
 	if result.RowsAffected == 0 {
 		return repo.ErrNotFound
 	}
-	
+
 	return nil
 }
-
-
