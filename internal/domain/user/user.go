@@ -95,4 +95,5 @@ type EmailVerification struct {
 	Attempts    int       // Количество использованных попыток
 	MaxAttempts int       // Максимально допустимое количество попыток
 	CreatedAt   time.Time // Время создания записи
+	NewEmail    *string   // Новый email для изменения (nil при обычном подтверждении при регистрации)
 }

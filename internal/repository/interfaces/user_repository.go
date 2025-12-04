@@ -50,5 +50,3 @@ type UserRepository interface {
 	// В первой версии без пагинации; при необходимости можно расширить фильтрами.
 	List(ctx context.Context) ([]*domain.User, error)
 }
-
-

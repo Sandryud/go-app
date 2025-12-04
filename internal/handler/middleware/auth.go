@@ -8,8 +8,8 @@ import (
 
 	domain "workout-app/internal/domain/user"
 	"workout-app/internal/handler/response"
-	"workout-app/pkg/logger"
 	jwtsvc "workout-app/pkg/jwt"
+	"workout-app/pkg/logger"
 )
 
 const (
@@ -117,4 +117,3 @@ func RequireRole(log logger.Logger, allowedRoles ...domain.Role) gin.HandlerFunc
 		c.Next()
 	}
 }
-

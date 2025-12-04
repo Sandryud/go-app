@@ -26,6 +26,7 @@ import (
 	useruc "workout-app/internal/usecase/user"
 	"workout-app/pkg/jwt"
 	"workout-app/pkg/logger"
+	mailerpkg "workout-app/pkg/mailer"
 
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
@@ -80,17 +81,17 @@ func NewServer(cfg *config.Config, db *database.DB) *Server {
 	// Инициализируем зависимости домена пользователя и аутентификации один раз
 	gormDB := db.DB
 	userRepo := pgrepo.NewUserRepository(gormDB)
-	userService := useruc.NewService(userRepo)
 	emailVerifRepo := pgrepo.NewEmailVerificationRepository(gormDB)
 	s.jwtService = jwt.NewService(&cfg.JWT)
 
-	var emailSender authuc.EmailSender
+	var emailSender mailerpkg.EmailSender
 	if cfg.Email.SMTPHost != "" {
 		emailSender = mailer.NewSMTPSender(&cfg.Email, s.logger)
 	} else {
 		// Фолбэк: логируем коды в лог вместо реальной отправки писем.
 		emailSender = &loggerEmailSender{logger: s.logger}
 	}
+
 	authService := authuc.NewService(
 		userRepo,
 		emailVerifRepo,
@@ -100,6 +101,17 @@ func NewServer(cfg *config.Config, db *database.DB) *Server {
 		cfg.Email.VerificationMaxAttempts,
 		cfg.Email.VerificationCodeLength,
 	)
+
+	// userService использует тот же emailSender, что и authService
+	userService := useruc.NewService(
+		userRepo,
+		emailVerifRepo,
+		emailSender,
+		cfg.Email.VerificationTTL,
+		cfg.Email.VerificationMaxAttempts,
+		cfg.Email.VerificationCodeLength,
+	)
+
 	s.authHandler = authhandler.NewHandler(authService)
 	s.userHandler = userhandler.NewHandler(userService, s.logger)
 
@@ -180,6 +192,10 @@ func (s *Server) setupUserRoutes() {
 		userGroup.PUT("/me", s.userHandler.UpdateMe)
 		// DELETE /api/v1/users/me — мягко удалить (деактивировать) аккаунт текущего пользователя.
 		userGroup.DELETE("/me", s.userHandler.DeleteMe)
+		// POST /api/v1/users/me/change-email — запросить изменение email (отправка кода на новый email).
+		userGroup.POST("/me/change-email", s.userHandler.RequestEmailChange)
+		// POST /api/v1/users/me/verify-email-change — подтвердить изменение email по коду.
+		userGroup.POST("/me/verify-email-change", s.userHandler.VerifyEmailChange)
 		// GET /api/v1/users/:id — получить публичный профиль пользователя по ID.
 		userGroup.GET("/:id", s.userHandler.GetByID)
 	}

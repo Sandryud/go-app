@@ -26,9 +26,10 @@ func NewSMTPSender(cfg *config.EmailConfig, logger logger.Logger) *SMTPSender {
 }
 
 // SendEmailVerificationCode отправляет письмо с кодом подтверждения email.
+// Используется как для подтверждения email при регистрации, так и для подтверждения изменения email.
 func (s *SMTPSender) SendEmailVerificationCode(ctx context.Context, email, code string) error {
 	subject := "Your verification code"
-	body := fmt.Sprintf("Your verification code is: %s\n", code)
+	body := fmt.Sprintf("Your verification code is: %s\n\nThis code will expire in a few minutes.", code)
 
 	msg := buildMessage(s.cfg.FromEmail, email, subject, body)
 
@@ -62,5 +63,3 @@ func buildMessage(from, to, subject, body string) string {
 	b.WriteString(body)
 	return b.String()
 }
-
-

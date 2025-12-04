@@ -50,8 +50,21 @@ func (r *fakeEmailVerifRepo) Create(_ context.Context, v *domain.EmailVerificati
 func (r *fakeEmailVerifRepo) GetActiveByUserID(context.Context, uuid.UUID) (*domain.EmailVerification, error) {
 	return nil, repo.ErrNotFound
 }
+func (r *fakeEmailVerifRepo) GetActiveByUserIDAndNewEmail(context.Context, uuid.UUID, string) (*domain.EmailVerification, error) {
+	return nil, repo.ErrNotFound
+}
+func (r *fakeEmailVerifRepo) GetActiveEmailChangeByUserID(context.Context, uuid.UUID) (*domain.EmailVerification, error) {
+	return nil, repo.ErrNotFound
+}
+func (r *fakeEmailVerifRepo) GetByID(context.Context, int64) (*domain.EmailVerification, error) {
+	return nil, repo.ErrNotFound
+}
 func (r *fakeEmailVerifRepo) IncrementAttempts(context.Context, int64) error { return nil }
 func (r *fakeEmailVerifRepo) DeleteByUserID(_ context.Context, userID uuid.UUID) error {
+	r.deletedForUser = userID
+	return nil
+}
+func (r *fakeEmailVerifRepo) DeleteEmailChangeByUserID(_ context.Context, userID uuid.UUID) error {
 	r.deletedForUser = userID
 	return nil
 }

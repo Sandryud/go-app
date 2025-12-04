@@ -6,8 +6,8 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 
-	domain "workout-app/internal/domain/user"
 	"workout-app/internal/config"
+	domain "workout-app/internal/domain/user"
 )
 
 // Claims описывает JWT-пейлоад, который мы используем для access и refresh токенов.
@@ -123,5 +123,3 @@ func (s *service) parseToken(tokenString string, secret []byte) (*Claims, error)
 
 	return claims, nil
 }
-
-

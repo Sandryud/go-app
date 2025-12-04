@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -20,6 +21,7 @@ type pgEmailVerification struct {
 	Attempts    int       `gorm:"column:attempts;type:int;not null"`
 	MaxAttempts int       `gorm:"column:max_attempts;type:int;not null"`
 	CreatedAt   time.Time `gorm:"column:created_at;type:timestamptz;not null"`
+	NewEmail    *string   `gorm:"column:new_email;type:varchar(255)"`
 }
 
 func (pgEmailVerification) TableName() string {
@@ -40,6 +42,7 @@ func (m *pgEmailVerification) toDomain() (*domain.EmailVerification, error) {
 		Attempts:    m.Attempts,
 		MaxAttempts: m.MaxAttempts,
 		CreatedAt:   m.CreatedAt,
+		NewEmail:    m.NewEmail,
 	}, nil
 }
 
@@ -52,6 +55,7 @@ func fromDomainEmailVerification(v *domain.EmailVerification) *pgEmailVerificati
 		Attempts:    v.Attempts,
 		MaxAttempts: v.MaxAttempts,
 		CreatedAt:   v.CreatedAt,
+		NewEmail:    v.NewEmail,
 	}
 }
 
@@ -79,8 +83,65 @@ func (r *EmailVerificationRepository) GetActiveByUserID(ctx context.Context, use
 	var model pgEmailVerification
 
 	err := r.db.WithContext(ctx).
-		Where("user_id = ? AND expires_at > NOW()", userID.String()).
+		Where("user_id = ? AND expires_at > NOW() AND new_email IS NULL", userID.String()).
 		Order("created_at DESC").
+		Take(&model).Error
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, repo.ErrNotFound
+		}
+		return nil, err
+	}
+
+	return model.toDomain()
+}
+
+// GetActiveByUserIDAndNewEmail возвращает активную (не истекшую) запись по user_id и new_email.
+func (r *EmailVerificationRepository) GetActiveByUserIDAndNewEmail(ctx context.Context, userID uuid.UUID, newEmail string) (*domain.EmailVerification, error) {
+	if newEmail == "" {
+		return nil, fmt.Errorf("newEmail cannot be empty")
+	}
+
+	var model pgEmailVerification
+
+	err := r.db.WithContext(ctx).
+		Where("user_id = ? AND new_email = ? AND expires_at > NOW()", userID.String(), newEmail).
+		Order("created_at DESC").
+		Take(&model).Error
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, repo.ErrNotFound
+		}
+		return nil, err
+	}
+
+	return model.toDomain()
+}
+
+// GetActiveEmailChangeByUserID возвращает активную (не истекшую) запись изменения email по user_id.
+func (r *EmailVerificationRepository) GetActiveEmailChangeByUserID(ctx context.Context, userID uuid.UUID) (*domain.EmailVerification, error) {
+	var model pgEmailVerification
+
+	err := r.db.WithContext(ctx).
+		Where("user_id = ? AND new_email IS NOT NULL AND expires_at > NOW()", userID.String()).
+		Order("created_at DESC").
+		Take(&model).Error
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, repo.ErrNotFound
+		}
+		return nil, err
+	}
+
+	return model.toDomain()
+}
+
+// GetByID возвращает запись верификации по её ID.
+func (r *EmailVerificationRepository) GetByID(ctx context.Context, id int64) (*domain.EmailVerification, error) {
+	var model pgEmailVerification
+
+	err := r.db.WithContext(ctx).
+		Where("id = ?", id).
 		Take(&model).Error
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
@@ -120,4 +181,14 @@ func (r *EmailVerificationRepository) DeleteByUserID(ctx context.Context, userID
 	return nil
 }
 
+// DeleteEmailChangeByUserID удаляет все записи кодов изменения email для указанного пользователя.
+func (r *EmailVerificationRepository) DeleteEmailChangeByUserID(ctx context.Context, userID uuid.UUID) error {
+	result := r.db.WithContext(ctx).
+		Where("user_id = ? AND new_email IS NOT NULL", userID.String()).
+		Delete(&pgEmailVerification{})
 
+	if result.Error != nil {
+		return result.Error
+	}
+	return nil
+}

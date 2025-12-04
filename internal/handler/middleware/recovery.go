@@ -13,7 +13,7 @@ func Recovery() gin.HandlerFunc {
 	return gin.CustomRecovery(func(c *gin.Context, recovered interface{}) {
 		// Логируем панику с подробной информацией
 		log.Printf("Паника перехвачена: %v\n", recovered)
-		
+
 		// Логируем стек вызовов (если доступен)
 		if err, ok := recovered.(string); ok {
 			log.Printf("Ошибка: %s\n", err)

@@ -26,5 +26,3 @@ func (l *stdLogger) Info(msg string, fields map[string]any) {
 func (l *stdLogger) Error(msg string, fields map[string]any) {
 	log.Printf("ERROR: %s %v", msg, fields)
 }
-
-
