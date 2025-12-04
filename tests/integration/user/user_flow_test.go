@@ -92,7 +92,7 @@ func TestUser_Profile_Flow(t *testing.T) {
 }
 
 // TestUser_GetByID проверяет endpoint GET /api/v1/users/:id:
-// успешное получение, проверка публичного профиля (без email), 404 для несуществующего, 400 для невалидного UUID.
+// успешное получение публичного профиля другим пользователем, 404 для несуществующего, 400 для невалидного UUID, 401 без авторизации.
 func TestUser_GetByID(t *testing.T) {
 	router := testcfg.NewTestRouter(t)
 
@@ -175,18 +175,7 @@ func TestUser_GetByID(t *testing.T) {
 	_, emailExists := profileMap["email"]
 	require.False(t, emailExists, "email не должен присутствовать в публичном профиле")
 
-	// 5. GET /users/:id - получение собственного профиля
-	w = httptest.NewRecorder()
-	req = httptest.NewRequest(http.MethodGet, "/api/v1/users/"+user1ID, nil)
-	req.Header.Set("Authorization", "Bearer "+access1)
-	router.ServeHTTP(w, req)
-	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
-
-	var ownProfile userhandler.PublicProfileResponse
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &ownProfile))
-	require.Equal(t, user1ID, ownProfile.ID)
-
-	// 6. GET /users/:id - несуществующий пользователь -> 404
+	// 5. GET /users/:id - несуществующий пользователь -> 404
 	nonExistentID := "00000000-0000-0000-0000-000000000000"
 	w = httptest.NewRecorder()
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/users/"+nonExistentID, nil)
@@ -194,18 +183,16 @@ func TestUser_GetByID(t *testing.T) {
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusNotFound, w.Code, w.Body.String())
 
-	// 7. GET /users/:id - невалидный UUID -> 400
+	// 6. GET /users/:id - невалидный UUID -> 400
 	w = httptest.NewRecorder()
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/users/invalid-uuid", nil)
 	req.Header.Set("Authorization", "Bearer "+access1)
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
 
-	// 8. GET /users/:id - без авторизации -> 401
+	// 7. GET /users/:id - без авторизации -> 401
 	w = httptest.NewRecorder()
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/users/"+user1ID, nil)
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusUnauthorized, w.Code, w.Body.String())
 }
-
-

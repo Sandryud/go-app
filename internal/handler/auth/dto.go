@@ -29,6 +29,16 @@ type VerifyEmailRequest struct {
 	Code  string `json:"code" binding:"required,len=6"`
 }
 
+// ResendVerificationRequest описывает тело запроса повторной отправки кода.
+type ResendVerificationRequest struct {
+	Email string `json:"email" binding:"required,email"`
+}
+
+// ResendVerificationResponse описывает ответ на повторную отправку кода.
+type ResendVerificationResponse struct {
+	Message string `json:"message"`
+}
+
 // TokenPair описывает пару access/refresh токенов.
 type TokenPair struct {
 	AccessToken  string `json:"access_token"`

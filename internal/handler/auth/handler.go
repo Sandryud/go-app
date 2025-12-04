@@ -46,6 +46,9 @@ func (h *Handler) Register(c *gin.Context) {
 	user, err := h.auth.Register(c.Request.Context(), req.Email, req.Password, req.Username)
 	if err != nil {
 		switch {
+		case errors.Is(err, authuc.ErrEmailUnverifiedExists):
+			log.Printf("unverified email conflict in Register: email=%s err=%v", req.Email, err)
+			response.Error(c, http.StatusConflict, "email_unverified", "Account with this email already exists but is not verified. Please request a new verification code.", nil)
 		case errors.Is(err, repo.ErrEmailExists):
 			log.Printf("email conflict in Register: email=%s err=%v", req.Email, err)
 			response.Error(c, http.StatusConflict, "email_already_exists", "Email is already in use", nil)
@@ -161,6 +164,45 @@ func (h *Handler) Refresh(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
+// ResendVerification godoc
+// @Summary      Повторная отправка кода подтверждения email
+// @Description  Отправляет новый код подтверждения на указанный email, если аккаунт ещё не подтверждён.
+// @Tags         auth
+// @Accept       json
+// @Produce      json
+// @Param        payload  body      ResendVerificationRequest  true  "Email для повторной отправки кода"
+// @Success      200      {object}  ResendVerificationResponse
+// @Failure      400      {object}  response.ErrorBody
+// @Failure      500      {object}  response.ErrorBody
+// @Router       /api/v1/auth/resend-verification [post]
+func (h *Handler) ResendVerification(c *gin.Context) {
+	var req ResendVerificationRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, http.StatusBadRequest, "invalid_request", "Invalid request body", err.Error())
+		return
+	}
+
+	err := h.auth.ResendVerificationCode(c.Request.Context(), req.Email)
+	if err != nil {
+		switch {
+		case errors.Is(err, authuc.ErrEmailAlreadyVerified):
+			// Email уже подтверждён — мягкий ответ 200
+			c.JSON(http.StatusOK, ResendVerificationResponse{
+				Message: "Email is already verified",
+			})
+			return
+		default:
+			log.Printf("internal error in ResendVerification: email=%s err=%v", req.Email, err)
+			response.Error(c, http.StatusInternalServerError, "internal_error", "Internal server error", nil)
+			return
+		}
+	}
+
+	c.JSON(http.StatusOK, ResendVerificationResponse{
+		Message: "If an account with this email exists, a verification code has been sent",
+	})
+}
+
 // VerifyEmail godoc
 // @Summary      Подтверждение email кодом
 // @Description  Подтверждает email пользователя по одноразовому коду и возвращает пару access/refresh токенов.
@@ -187,7 +229,7 @@ func (h *Handler) VerifyEmail(c *gin.Context) {
 		case errors.Is(err, authuc.ErrEmailAlreadyVerified):
 			response.Error(c, http.StatusConflict, "email_already_verified", "Email is already verified", nil)
 		case errors.Is(err, authuc.ErrVerificationCodeNotFound):
-			response.Error(c, http.StatusBadRequest, "verification_code_not_found", "Verification code not found or expired", nil)
+			response.Error(c, http.StatusBadRequest, "verification_code_not_found", "Verification code not found or expired. Please request a new verification code.", nil)
 		case errors.Is(err, authuc.ErrVerificationCodeInvalid):
 			response.Error(c, http.StatusBadRequest, "verification_code_invalid", "Verification code is invalid", nil)
 		case errors.Is(err, authuc.ErrVerificationAttemptsExceeded):

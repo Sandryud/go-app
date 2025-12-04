@@ -160,6 +160,8 @@ func (s *Server) setupAuthRoutes() {
 		authGroup.POST("/login", s.authHandler.Login)
 		// POST /api/v1/auth/verify-email — подтверждение email одноразовым кодом.
 		authGroup.POST("/verify-email", s.authHandler.VerifyEmail)
+		// POST /api/v1/auth/resend-verification — повторная отправка кода подтверждения email.
+		authGroup.POST("/resend-verification", s.authHandler.ResendVerification)
 		// POST /api/v1/auth/refresh — обновление пары access/refresh токенов по refresh-токену.
 		authGroup.POST("/refresh", s.authHandler.Refresh)
 	}

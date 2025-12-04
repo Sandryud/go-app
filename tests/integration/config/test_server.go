@@ -94,7 +94,7 @@ func VerifyUserEmailForTests(t *testing.T, email string) {
 	if testDB == nil {
 		t.Fatalf("test database is not initialized")
 	}
-	if err := testDB.Exec(`UPDATE users SET is_email_verified = TRUE WHERE email = ?`, email).Error; err != nil {
+	if err := testDB.Exec(`UPDATE users SET is_email_verified = TRUE WHERE email = $1`, email).Error; err != nil {
 		t.Fatalf("failed to verify user email in tests: %v", err)
 	}
 }

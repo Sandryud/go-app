@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"crypto/rand"
+	"errors"
 	"fmt"
 	"math/big"
 	"time"
@@ -37,6 +38,10 @@ type Service interface {
 
 	// Refresh обновляет пару access/refresh токенов по действительному refresh-токену.
 	Refresh(ctx context.Context, refreshToken string) (*domain.User, string, string, error)
+
+	// ResendVerificationCode повторно отправляет код подтверждения email,
+	// если аккаунт существует и ещё не подтверждён.
+	ResendVerificationCode(ctx context.Context, email string) error
 }
 
 // Ошибки бизнес-логики usecase-слоя.
@@ -48,6 +53,7 @@ var (
 	ErrEmailNotVerified             = fmt.Errorf("email not verified")
 	ErrInvalidCredentials           = fmt.Errorf("invalid email or password")
 	ErrInvalidRefreshToken          = fmt.Errorf("invalid refresh token")
+	ErrEmailUnverifiedExists        = fmt.Errorf("unverified account with this email already exists")
 )
 
 type service struct {
@@ -99,36 +105,24 @@ func (s *service) Register(ctx context.Context, email, rawPassword, username str
 	user.IsEmailVerified = false
 
 	if err := s.users.Create(ctx, user); err != nil {
+		// Дополнительно различаем случай, когда существует неподтверждённый аккаунт.
+		if errors.Is(err, repo.ErrEmailExists) {
+			existing, getErr := s.users.GetByEmail(ctx, email)
+			if getErr != nil {
+				return nil, err
+			}
+			if existing.IsEmailVerified {
+				// Обычный конфликт: подтверждённый email.
+				return nil, repo.ErrEmailExists
+			}
+			// Email уже существует, но не подтверждён.
+			return nil, ErrEmailUnverifiedExists
+		}
 		return nil, err
 	}
 
-	// Генерируем одноразовый код и его хэш.
-	code, err := generateNumericCode(s.codeLength)
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate verification code: %w", err)
-	}
-
-	codeHash, err := password.Hash(code)
-	if err != nil {
-		return nil, fmt.Errorf("failed to hash verification code: %w", err)
-	}
-
-	now := time.Now().UTC()
-	verification := &domain.EmailVerification{
-		UserID:      user.ID,
-		CodeHash:    codeHash,
-		ExpiresAt:   now.Add(s.verificationTTL),
-		Attempts:    0,
-		MaxAttempts: s.maxAttempts,
-		CreatedAt:   now,
-	}
-
-	if err := s.emailVerifs.Create(ctx, verification); err != nil {
+	if err := s.createAndSendVerificationCode(ctx, user); err != nil {
 		return nil, err
-	}
-
-	if err := s.emailSender.SendEmailVerificationCode(ctx, user.Email, code); err != nil {
-		return nil, fmt.Errorf("failed to send verification email: %w", err)
 	}
 
 	return user, nil
@@ -284,6 +278,69 @@ func (s *service) Refresh(ctx context.Context, refreshToken string) (*domain.Use
 	}
 
 	return user, access, refresh, nil
+}
+
+// ResendVerificationCode повторно отправляет код подтверждения email,
+// если аккаунт существует и ещё не подтверждён.
+func (s *service) ResendVerificationCode(ctx context.Context, email string) error {
+	if email == "" {
+		return fmt.Errorf("email is required")
+	}
+
+	user, err := s.users.GetByEmail(ctx, email)
+	if err != nil {
+		if err == repo.ErrNotFound {
+			// Не раскрываем, что пользователя нет — считаем успешным no-op.
+			return nil
+		}
+		return err
+	}
+
+	if user.IsEmailVerified {
+		// Уже подтверждён — handler решит, что ответить клиенту.
+		return ErrEmailAlreadyVerified
+	}
+
+	// Удаляем все старые коды для пользователя (если есть).
+	if err := s.emailVerifs.DeleteByUserID(ctx, user.ID); err != nil && err != repo.ErrNotFound {
+		return err
+	}
+
+	return s.createAndSendVerificationCode(ctx, user)
+}
+
+// createAndSendVerificationCode создаёт запись с кодом подтверждения email
+// и отправляет его пользователю.
+func (s *service) createAndSendVerificationCode(ctx context.Context, user *domain.User) error {
+	code, err := generateNumericCode(s.codeLength)
+	if err != nil {
+		return fmt.Errorf("failed to generate verification code: %w", err)
+	}
+
+	codeHash, err := password.Hash(code)
+	if err != nil {
+		return fmt.Errorf("failed to hash verification code: %w", err)
+	}
+
+	now := time.Now().UTC()
+	verification := &domain.EmailVerification{
+		UserID:      user.ID,
+		CodeHash:    codeHash,
+		ExpiresAt:   now.Add(s.verificationTTL),
+		Attempts:    0,
+		MaxAttempts: s.maxAttempts,
+		CreatedAt:   now,
+	}
+
+	if err := s.emailVerifs.Create(ctx, verification); err != nil {
+		return err
+	}
+
+	if err := s.emailSender.SendEmailVerificationCode(ctx, user.Email, code); err != nil {
+		return fmt.Errorf("failed to send verification email: %w", err)
+	}
+
+	return nil
 }
 
 // generateNumericCode генерирует криптографически стойкий числовой код заданной длины.
