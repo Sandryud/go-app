@@ -27,7 +27,7 @@
 
 ### POST `/api/v1/auth/register`
 
-- **Описание**: регистрация нового пользователя.
+- **Описание**: регистрация нового пользователя. После регистрации на указанный email отправляется код подтверждения. Для получения токенов доступа необходимо подтвердить email через эндпоинт `/api/v1/auth/verify-email`.
 - **Тело запроса**:
 
 ```json
@@ -45,16 +45,14 @@
   "user_id": "3691663d-0fb2-4cc4-a0c3-8ad710d00835",
   "email": "user1@example.com",
   "username": "user1",
-  "tokens": {
-    "access_token": "...",
-    "refresh_token": "..."
-  }
+  "message": "Verification code has been sent to your email"
 }
 ```
 
 - **Ошибки**:
   - `400 invalid_request` — невалидное тело.
-  - `409 email_already_exists` — email занят.
+  - `409 email_already_exists` — email занят (аккаунт уже подтверждён).
+  - `409 email_unverified` — аккаунт с таким email существует, но не подтверждён. Запросите новый код подтверждения через `/api/v1/auth/resend-verification`.
   - `409 username_already_exists` — username занят.
 
 Пример:
@@ -69,7 +67,7 @@ curl -i -X POST http://localhost:8080/api/v1/auth/register \
 
 ### POST `/api/v1/auth/login`
 
-- **Описание**: вход по email/паролю.
+- **Описание**: вход по email/паролю. Требуется, чтобы email был подтверждён через `/api/v1/auth/verify-email`.
 - **Тело**:
 
 ```json
@@ -79,10 +77,24 @@ curl -i -X POST http://localhost:8080/api/v1/auth/register \
 }
 ```
 
-- **Успех**: `200 OK` + `LoginResponse` (как при регистрации).
+- **Успех**: `200 OK`
+
+```json
+{
+  "user_id": "3691663d-0fb2-4cc4-a0c3-8ad710d00835",
+  "email": "user1@example.com",
+  "username": "user1",
+  "tokens": {
+    "access_token": "...",
+    "refresh_token": "..."
+  }
+}
+```
+
 - **Ошибки**:
   - `400 invalid_request`
   - `401 invalid_credentials` — неверный email или пароль.
+  - `403 email_not_verified` — email не подтверждён. Используйте `/api/v1/auth/verify-email` для подтверждения.
 
 Пример:
 
@@ -94,9 +106,92 @@ curl -i -X POST http://localhost:8080/api/v1/auth/login \
 
 ---
 
+### POST `/api/v1/auth/verify-email`
+
+- **Описание**: подтверждение email одноразовым кодом, отправленным при регистрации. После успешного подтверждения возвращает пару access/refresh токенов.
+- **Тело**:
+
+```json
+{
+  "email": "user1@example.com",
+  "code": "123456"
+}
+```
+
+- **Успех**: `200 OK`
+
+```json
+{
+  "user_id": "3691663d-0fb2-4cc4-a0c3-8ad710d00835",
+  "email": "user1@example.com",
+  "username": "user1",
+  "tokens": {
+    "access_token": "...",
+    "refresh_token": "..."
+  }
+}
+```
+
+- **Ошибки**:
+  - `400 invalid_request` — невалидное тело запроса.
+  - `400 verification_code_not_found` — код не найден или истёк срок действия. Запросите новый код через `/api/v1/auth/resend-verification`.
+  - `400 verification_code_invalid` — неверный код подтверждения.
+  - `400 verification_attempts_exceeded` — превышен лимит попыток ввода кода. Запросите новый код.
+  - `409 email_already_verified` — email уже подтверждён.
+
+Пример:
+
+```bash
+curl -i -X POST http://localhost:8080/api/v1/auth/verify-email \
+  -H "Content-Type: application/json" \
+  -d '{"email":"user1@example.com","code":"123456"}'
+```
+
+---
+
+### POST `/api/v1/auth/resend-verification`
+
+- **Описание**: повторная отправка кода подтверждения email. Используется, если код не пришёл, истёк или были исчерпаны попытки ввода.
+- **Тело**:
+
+```json
+{
+  "email": "user1@example.com"
+}
+```
+
+- **Успех**: `200 OK`
+
+```json
+{
+  "message": "If an account with this email exists, a verification code has been sent"
+}
+```
+
+Если email уже подтверждён, возвращается:
+
+```json
+{
+  "message": "Email is already verified"
+}
+```
+
+- **Ошибки**:
+  - `400 invalid_request` — невалидное тело запроса.
+
+Пример:
+
+```bash
+curl -i -X POST http://localhost:8080/api/v1/auth/resend-verification \
+  -H "Content-Type: application/json" \
+  -d '{"email":"user1@example.com"}'
+```
+
+---
+
 ### POST `/api/v1/auth/refresh`
 
-- **Описание**: обновление пары access/refresh по refresh‑токену.
+- **Описание**: обновление пары access/refresh по refresh‑токену. Требуется, чтобы email пользователя был подтверждён.
 - **Тело**:
 
 ```json
@@ -105,10 +200,24 @@ curl -i -X POST http://localhost:8080/api/v1/auth/login \
 }
 ```
 
-- **Успех**: `200 OK` + новая пара токенов.
+- **Успех**: `200 OK`
+
+```json
+{
+  "user_id": "3691663d-0fb2-4cc4-a0c3-8ad710d00835",
+  "email": "user1@example.com",
+  "username": "user1",
+  "tokens": {
+    "access_token": "...",
+    "refresh_token": "..."
+  }
+}
+```
+
 - **Ошибки**:
   - `400 invalid_request`
-  - `401 invalid_refresh_token`
+  - `401 invalid_refresh_token` — неверный или истёкший refresh‑токен.
+  - `403 email_not_verified` — email не подтверждён. Используйте `/api/v1/auth/verify-email` для подтверждения.
 
 Пример:
 

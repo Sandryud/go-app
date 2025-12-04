@@ -17,11 +17,14 @@ type EmailVerificationRepository interface {
 	// Возвращает (nil, ErrNotFound), если активного кода нет.
 	GetActiveByUserID(ctx context.Context, userID uuid.UUID) (*domain.EmailVerification, error)
 
+	// GetActiveByUserIDAndNewEmail возвращает активную (не истекшую) запись по user_id и new_email.
+	// Используется для поиска кода подтверждения изменения email.
+	// Возвращает (nil, ErrNotFound), если активного кода нет.
+	GetActiveByUserIDAndNewEmail(ctx context.Context, userID uuid.UUID, newEmail string) (*domain.EmailVerification, error)
+
 	// IncrementAttempts увеличивает счетчик попыток для записи по её ID.
 	IncrementAttempts(ctx context.Context, id int64) error
 
 	// DeleteByUserID удаляет все записи кодов для указанного пользователя.
 	DeleteByUserID(ctx context.Context, userID uuid.UUID) error
 }
-
-
