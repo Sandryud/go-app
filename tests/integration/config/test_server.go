@@ -4,14 +4,11 @@
 package config
 
 import (
-	"errors"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgconn"
 
 	appcfg "workout-app/internal/config"
 	"workout-app/internal/database"
@@ -50,9 +47,9 @@ func NewTestRouter(t *testing.T) *gin.Engine {
 
 	testDB = db
 
-	// Применяем миграцию и очищаем данные перед каждым тестом.
-	if err := migrateUsers(db); err != nil {
-		t.Fatalf("migrate users: %v", err)
+	// Применяем миграции и очищаем данные перед каждым тестом.
+	if err := MigrateDatabase(db); err != nil {
+		t.Fatalf("migrate database: %v", err)
 	}
 	if err := clearUsers(db); err != nil {
 		t.Fatalf("clear users: %v", err)
@@ -83,39 +80,6 @@ func findProjectRoot() (string, error) {
 		}
 		dir = parent
 	}
-}
-
-// migrateUsers применяет SQL-миграции для таблицы users и связанных сущностей.
-func migrateUsers(db *database.DB) error {
-	files := []string{
-		"internal/database/migrations/001_create_users_table.sql",
-		"internal/database/migrations/002_add_is_email_verified_to_users.sql",
-		"internal/database/migrations/003_create_email_verifications_table.sql",
-	}
-
-	for _, path := range files {
-		sqlBytes, err := os.ReadFile(path)
-		if err != nil {
-			return err
-		}
-		if err := db.Exec(string(sqlBytes)).Error; err != nil {
-			// В интеграционных тестах миграция может быть уже применена (например, при повторных запусках).
-			// Игнорируем дубликат триггера "update_users_updated_at".
-			var pgErr *pgconn.PgError
-			if errors.As(err, &pgErr) {
-				if pgErr.Code == "42710" && strings.Contains(pgErr.Message, "update_users_updated_at") {
-					continue
-				}
-			}
-			// Fallback по тексту ошибки, если err не приведён к *pgconn.PgError
-			msg := err.Error()
-			if strings.Contains(msg, "42710") && strings.Contains(msg, "update_users_updated_at") {
-				continue
-			}
-			return err
-		}
-	}
-	return nil
 }
 
 // clearUsers очищает таблицу users перед тестом.

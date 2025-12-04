@@ -17,7 +17,6 @@ go-app/
 │   └── database/            # Database initialization and migrations
 ├── pkg/                     # Reusable packages
 ├── api/                     # API specification
-├── migrations/              # SQL migrations
 ├── scripts/                 # Helper scripts
 └── tests/                   # Tests
 ```
@@ -83,6 +82,65 @@ docker-compose ps
 docker-compose down
 ```
 
+### Миграции базы данных
+
+Проект использует библиотеку [golang-migrate](https://github.com/golang-migrate/migrate) для управления миграциями базы данных. Все SQL файлы миграций встроены в бинарник через `go:embed`.
+
+#### Применение миграций
+
+```bash
+# Применить все доступные миграции (по умолчанию)
+make migrate-up
+
+# Или напрямую через команду
+go run ./cmd/migrate
+go run ./cmd/migrate -up
+```
+
+#### Откат миграций
+
+```bash
+# Откатить последнюю примененную миграцию
+make migrate-down
+go run ./cmd/migrate -down
+```
+
+#### Применение/откат N миграций
+
+```bash
+# Применить 2 миграции
+make migrate-steps STEPS=2
+go run ./cmd/migrate -steps 2
+
+# Откатить 1 миграцию
+make migrate-steps STEPS=-1
+go run ./cmd/migrate -steps -1
+```
+
+#### Проверка версии
+
+```bash
+# Показать текущую версию миграций
+make migrate-version
+go run ./cmd/migrate -version
+```
+
+#### Справка по командам
+
+```bash
+go run ./cmd/migrate -help
+```
+
+#### Формат файлов миграций
+
+Миграции должны следовать формату golang-migrate:
+- `{version}_{name}.up.sql` - применение миграции
+- `{version}_{name}.down.sql` - откат миграции
+
+Пример: `000001_create_users_table.up.sql`, `000001_create_users_table.down.sql`
+
+Все миграции находятся в `internal/database/migrations/` и автоматически встраиваются в бинарник.
+
 ### Проверка подключения к базе данных
 
 Перед запуском сервера рекомендуется проверить подключение к базе данных:
@@ -117,11 +175,24 @@ docker-compose up
 
 ### Доступные команды
 
+#### Основные команды
+
 - `make run` - Запустить приложение локально
 - `make build` - Собрать бинарник
 - `make test` - Запустить тесты
 - `make check-db` - Проверить подключение к БД
+
+#### Команды миграций
+
+- `make migrate-up` - Применить все миграции
+- `make migrate-down` - Откатить последнюю миграцию
+- `make migrate-version` - Показать текущую версию миграций
+- `make migrate-steps STEPS=N` - Применить/откатить N миграций
+
+#### Docker команды
+
 - `make docker-up` - Запустить PostgreSQL в Docker
 - `make docker-down` - Остановить Docker контейнеры
 - `make docker-build` - Собрать Docker образ приложения
+- `make docker-logs` - Показать логи Docker контейнеров
 

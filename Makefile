@@ -1,4 +1,4 @@
-.PHONY: help run build test clean migrate-up migrate-down
+.PHONY: help run build test clean migrate-up migrate-down migrate-version migrate-steps
 
 help: ## Показать это сообщение с помощью
 	@echo 'Usage: make [target]'
@@ -23,12 +23,27 @@ clean: ## Очистить артефакты сборки
 	@rm -rf bin/
 	@rm -f coverage.out coverage.html
 
-migrate-up: ## Применить миграции базы данных
+migrate-up: ## Применить все миграции базы данных
 	@echo "Применение миграций базы данных..."
-	@go run ./cmd/migrate
+	@go run ./cmd/migrate -up
 
-migrate-down: ## Откатить миграции базы данных (пока не реализовано)
-	@echo "Откат миграций пока не реализован"
+migrate-down: ## Откатить последнюю миграцию базы данных
+	@echo "Откат последней миграции..."
+	@go run ./cmd/migrate -down
+
+migrate-version: ## Показать текущую версию миграций
+	@echo "Текущая версия миграций:"
+	@go run ./cmd/migrate -version
+
+migrate-steps: ## Применить/откатить N миграций (использование: make migrate-steps STEPS=2)
+	@if [ -z "$(STEPS)" ]; then \
+		echo "Ошибка: укажите количество шагов через переменную STEPS"; \
+		echo "Пример: make migrate-steps STEPS=2 (применить 2 миграции)"; \
+		echo "Пример: make migrate-steps STEPS=-1 (откатить 1 миграцию)"; \
+		exit 1; \
+	fi
+	@echo "Применение $(STEPS) миграций..."
+	@go run ./cmd/migrate -steps $(STEPS)
 
 tidy: ## Очистить go модули
 	@go mod tidy
