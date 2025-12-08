@@ -76,10 +76,12 @@ func TestUser_Profile_Flow(t *testing.T) {
 	require.Equal(t, "uflownew", updated.Username)
 	require.Equal(t, "intermediate", updated.TrainingLevel)
 
-	// 4. DELETE /users/me
+	// 4. DELETE /users/me (с подтверждением пароля)
+	deleteBody := `{"password":"Password123!"}`
 	w = httptest.NewRecorder()
-	req = httptest.NewRequest(http.MethodDelete, "/api/v1/users/me", nil)
+	req = httptest.NewRequest(http.MethodDelete, "/api/v1/users/me", strings.NewReader(deleteBody))
 	req.Header.Set("Authorization", "Bearer "+access)
+	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusNoContent, w.Code, w.Body.String())
 
