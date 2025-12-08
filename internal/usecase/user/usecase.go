@@ -32,7 +32,8 @@ type Service interface {
 	UpdateProfile(ctx context.Context, userID uuid.UUID, input ProfileUpdateInput) (*domain.User, error)
 
 	// DeleteAccount выполняет мягкое удаление аккаунта.
-	DeleteAccount(ctx context.Context, userID uuid.UUID) error
+	// Требует подтверждения пароля для безопасности.
+	DeleteAccount(ctx context.Context, userID uuid.UUID, rawPassword string) error
 
 	// ListUsers возвращает список всех активных пользователей.
 	// Предназначено для административных сценариев.
@@ -67,6 +68,7 @@ var (
 	ErrVerificationCodeNotFound     = fmt.Errorf("verification code not found")
 	ErrVerificationCodeInvalid      = fmt.Errorf("verification code invalid")
 	ErrVerificationAttemptsExceeded = fmt.Errorf("verification attempts exceeded")
+	ErrInvalidPassword              = fmt.Errorf("invalid password")
 )
 
 type service struct {
@@ -165,7 +167,24 @@ func (s *service) UpdateProfile(ctx context.Context, userID uuid.UUID, input Pro
 }
 
 // DeleteAccount выполняет мягкое удаление аккаунта.
-func (s *service) DeleteAccount(ctx context.Context, userID uuid.UUID) error {
+// Требует подтверждения пароля для безопасности.
+func (s *service) DeleteAccount(ctx context.Context, userID uuid.UUID, rawPassword string) error {
+	if rawPassword == "" {
+		return fmt.Errorf("password is required")
+	}
+
+	// Получаем пользователя для проверки пароля
+	user, err := s.users.GetByID(ctx, userID)
+	if err != nil {
+		return err
+	}
+
+	// Проверяем пароль
+	if err := password.Compare(user.PasswordHash, rawPassword); err != nil {
+		return ErrInvalidPassword
+	}
+
+	// Выполняем мягкое удаление только после успешной проверки пароля
 	return s.users.SoftDelete(ctx, userID)
 }
 
