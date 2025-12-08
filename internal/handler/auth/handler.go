@@ -148,7 +148,7 @@ func (h *Handler) Login(c *gin.Context) {
 		UserID:   user.ID.String(),
 		Email:    user.Email,
 		Username: user.Username,
-		Tokens: TokenPair{
+		Tokens: response.TokenPair{
 			AccessToken:  access,
 			RefreshToken: refresh,
 		},
@@ -198,7 +198,7 @@ func (h *Handler) Refresh(c *gin.Context) {
 		UserID:   user.ID.String(),
 		Email:    user.Email,
 		Username: user.Username,
-		Tokens: TokenPair{
+		Tokens: response.TokenPair{
 			AccessToken:  access,
 			RefreshToken: refresh,
 		},
@@ -298,7 +298,7 @@ func (h *Handler) VerifyEmail(c *gin.Context) {
 		UserID:   user.ID.String(),
 		Email:    user.Email,
 		Username: user.Username,
-		Tokens: TokenPair{
+		Tokens: response.TokenPair{
 			AccessToken:  access,
 			RefreshToken: refresh,
 		},

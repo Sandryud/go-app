@@ -235,7 +235,7 @@ curl -i -X POST http://localhost:8080/api/v1/auth/refresh \
 
 ### POST `/api/v1/users/restore`
 
-- **Описание**: восстановление удалённого аккаунта по email и паролю. Восстанавливает мягко удалённый аккаунт. После восстановления используйте `/api/v1/auth/login` для получения токенов.
+- **Описание**: восстановление удалённого аккаунта по email и паролю. Восстанавливает мягко удалённый аккаунт и возвращает пару access/refresh токенов.
 - **Тело**:
 
 ```json
@@ -245,20 +245,17 @@ curl -i -X POST http://localhost:8080/api/v1/auth/refresh \
 }
 ```
 
-- **Успех**: `200 OK` + профиль пользователя.
+- **Успех**: `200 OK` + профиль пользователя и токены.
 
 ```json
 {
-  "id": "3691663d-0fb2-4cc4-a0c3-8ad710d00835",
+  "user_id": "3691663d-0fb2-4cc4-a0c3-8ad710d00835",
   "email": "user1@example.com",
   "username": "user1",
-  "first_name": "Иван",
-  "last_name": "Иванов",
-  "gender": "male",
-  "role": "user",
-  "training_level": "intermediate",
-  "created_at": "...",
-  "updated_at": "..."
+  "tokens": {
+    "access_token": "...",
+    "refresh_token": "..."
+  }
 }
 ```
 
@@ -266,6 +263,7 @@ curl -i -X POST http://localhost:8080/api/v1/auth/refresh \
   - `400 invalid_request` — невалидное тело запроса. Сообщение: "Invalid request body".
   - `400 account_not_deleted` — попытка восстановить аккаунт, который не был удалён. Сообщение: "Account is not deleted".
   - `401 invalid_credentials` — неверный email или пароль. Сообщение: "Invalid email or password".
+  - `403 email_not_verified` — email не подтверждён. Сообщение: "Email is not verified. Please verify your email first."
   - `500 internal_error` — внутренняя ошибка сервера. Сообщение: "Internal server error".
 
 Пример:

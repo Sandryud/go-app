@@ -102,11 +102,12 @@ func NewServer(cfg *config.Config, db *database.DB) *Server {
 		cfg.Email.VerificationCodeLength,
 	)
 
-	// userService использует тот же emailSender, что и authService
+	// userService использует тот же emailSender и jwtService, что и authService
 	userService := useruc.NewService(
 		userRepo,
 		emailVerifRepo,
 		emailSender,
+		s.jwtService,
 		cfg.Email.VerificationTTL,
 		cfg.Email.VerificationMaxAttempts,
 		cfg.Email.VerificationCodeLength,

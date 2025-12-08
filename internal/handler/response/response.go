@@ -9,6 +9,12 @@ type ErrorBody struct {
 	Details interface{} `json:"details,omitempty"`
 }
 
+// TokenPair описывает пару access/refresh токенов.
+type TokenPair struct {
+	AccessToken  string `json:"access_token"`
+	RefreshToken string `json:"refresh_token"`
+}
+
 // Error отправляет JSON-ответ с ошибкой в едином формате.
 func Error(c *gin.Context, status int, code, message string, details interface{}) {
 	c.JSON(status, gin.H{

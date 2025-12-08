@@ -455,14 +455,15 @@ func (h *Handler) VerifyEmailChange(c *gin.Context) {
 
 // RestoreAccount godoc
 // @Summary      Восстановление удалённого аккаунта
-// @Description  Восстанавливает мягко удалённый аккаунт по email и паролю. Возвращает профиль пользователя. Для получения токенов используйте /api/v1/auth/login.
+// @Description  Восстанавливает мягко удалённый аккаунт по email и паролю. Возвращает профиль пользователя и пару access/refresh токенов.
 // @Tags         user
 // @Accept       json
 // @Produce      json
 // @Param        payload  body      RestoreAccountRequest  true  "Данные для восстановления"
-// @Success      200      {object}  ProfileResponse
+// @Success      200      {object}  RestoreAccountResponse
 // @Failure      400      {object}  response.ErrorBody
 // @Failure      401      {object}  response.ErrorBody
+// @Failure      403      {object}  response.ErrorBody
 // @Failure      500      {object}  response.ErrorBody
 // @Router       /api/v1/users/restore [post]
 func (h *Handler) RestoreAccount(c *gin.Context) {
@@ -472,7 +473,7 @@ func (h *Handler) RestoreAccount(c *gin.Context) {
 		return
 	}
 
-	user, err := h.users.RestoreAccount(c.Request.Context(), req.Email, req.Password)
+	user, access, refresh, err := h.users.RestoreAccount(c.Request.Context(), req.Email, req.Password)
 	if err != nil {
 		switch {
 		case errors.Is(err, useruc.ErrInvalidPassword):
@@ -489,6 +490,13 @@ func (h *Handler) RestoreAccount(c *gin.Context) {
 				"method": c.Request.Method,
 			})
 			response.Error(c, http.StatusBadRequest, "account_not_deleted", "Account is not deleted", nil)
+		case errors.Is(err, useruc.ErrEmailNotVerified):
+			h.logger.Info("email_not_verified_in_restore", map[string]any{
+				"email":  req.Email,
+				"path":   c.Request.URL.Path,
+				"method": c.Request.Method,
+			})
+			response.Error(c, http.StatusForbidden, "email_not_verified", "Email is not verified. Please verify your email first.", nil)
 		case errors.Is(err, repo.ErrNotFound):
 			// For security, return the same error as invalid password
 			h.logger.Info("user_not_found_in_restore", map[string]any{
@@ -510,7 +518,17 @@ func (h *Handler) RestoreAccount(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, toProfileResponse(user))
+	resp := RestoreAccountResponse{
+		UserID:   user.ID.String(),
+		Email:    user.Email,
+		Username: user.Username,
+		Tokens: response.TokenPair{
+			AccessToken:  access,
+			RefreshToken: refresh,
+		},
+	}
+
+	c.JSON(http.StatusOK, resp)
 }
 
 // toProfileResponse маппит доменную модель в DTO.

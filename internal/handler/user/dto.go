@@ -1,6 +1,10 @@
 package user
 
-import "time"
+import (
+	"time"
+
+	"workout-app/internal/handler/response"
+)
 
 // ProfileResponse описывает профиль текущего пользователя.
 // Этот контракт используется в защищённых эндпоинтах (/api/v1/users/me и т.п.).
@@ -72,4 +76,12 @@ type DeleteAccountRequest struct {
 type RestoreAccountRequest struct {
 	Email    string `json:"email" binding:"required,email"`
 	Password string `json:"password" binding:"required"`
+}
+
+// RestoreAccountResponse описывает ответ при успешном восстановлении аккаунта.
+type RestoreAccountResponse struct {
+	UserID   string             `json:"user_id"`
+	Email    string             `json:"email"`
+	Username string             `json:"username"`
+	Tokens   response.TokenPair `json:"tokens"`
 }
