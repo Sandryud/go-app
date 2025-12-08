@@ -49,4 +49,11 @@ type UserRepository interface {
 	// List возвращает всех активных (не удалённых) пользователей.
 	// В первой версии без пагинации; при необходимости можно расширить фильтрами.
 	List(ctx context.Context) ([]*domain.User, error)
+
+	// GetByEmailIncludingDeleted возвращает пользователя по email, включая удалённых.
+	// Используется для проверки существования аккаунта при логине/регистрации.
+	GetByEmailIncludingDeleted(ctx context.Context, email string) (*domain.User, error)
+
+	// RestoreAccount восстанавливает мягко удалённый аккаунт (обнуляет deleted_at).
+	RestoreAccount(ctx context.Context, id uuid.UUID) error
 }

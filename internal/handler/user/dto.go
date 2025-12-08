@@ -67,3 +67,9 @@ type VerifyEmailChangeRequest struct {
 type DeleteAccountRequest struct {
 	Password string `json:"password" binding:"required"`
 }
+
+// RestoreAccountRequest описывает тело запроса для восстановления аккаунта.
+type RestoreAccountRequest struct {
+	Email    string `json:"email" binding:"required,email"`
+	Password string `json:"password" binding:"required"`
+}

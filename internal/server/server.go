@@ -112,7 +112,7 @@ func NewServer(cfg *config.Config, db *database.DB) *Server {
 		cfg.Email.VerificationCodeLength,
 	)
 
-	s.authHandler = authhandler.NewHandler(authService)
+	s.authHandler = authhandler.NewHandler(authService, s.logger)
 	s.userHandler = userhandler.NewHandler(userService, s.logger)
 
 	// Настраиваем middleware и роуты
@@ -199,6 +199,10 @@ func (s *Server) setupUserRoutes() {
 		// GET /api/v1/users/:id — получить публичный профиль пользователя по ID.
 		userGroup.GET("/:id", s.userHandler.GetByID)
 	}
+
+	// Публичный эндпоинт для восстановления аккаунта (без middleware.Auth)
+	// POST /api/v1/users/restore — восстановить удалённый аккаунт по email и паролю.
+	v1.POST("/users/restore", s.userHandler.RestoreAccount)
 
 	// Админские роуты
 	adminGroup := v1.Group("/admin")

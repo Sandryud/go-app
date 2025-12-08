@@ -2,7 +2,6 @@ package auth
 
 import (
 	"errors"
-	"log"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -10,17 +9,20 @@ import (
 	"workout-app/internal/handler/response"
 	repo "workout-app/internal/repository/interfaces"
 	authuc "workout-app/internal/usecase/auth"
+	"workout-app/pkg/logger"
 )
 
 // Handler обрабатывает HTTP-запросы, связанные с аутентификацией.
 type Handler struct {
-	auth authuc.Service
+	auth   authuc.Service
+	logger logger.Logger
 }
 
 // NewHandler создаёт новый AuthHandler.
-func NewHandler(authSvc authuc.Service) *Handler {
+func NewHandler(authSvc authuc.Service, logger logger.Logger) *Handler {
 	return &Handler{
-		auth: authSvc,
+		auth:   authSvc,
+		logger: logger,
 	}
 }
 
@@ -46,17 +48,42 @@ func (h *Handler) Register(c *gin.Context) {
 	user, err := h.auth.Register(c.Request.Context(), req.Email, req.Password, req.Username)
 	if err != nil {
 		switch {
+		case errors.Is(err, authuc.ErrAccountDeleted):
+			h.logger.Info("account_deleted_in_register", map[string]any{
+				"email":  req.Email,
+				"path":   c.Request.URL.Path,
+				"method": c.Request.Method,
+			})
+			response.Error(c, http.StatusConflict, "account_deleted", "Account with this email was deleted. Use the account restoration endpoint.", nil)
 		case errors.Is(err, authuc.ErrEmailUnverifiedExists):
-			log.Printf("unverified email conflict in Register: email=%s err=%v", req.Email, err)
+			h.logger.Info("unverified_email_conflict_in_register", map[string]any{
+				"email":  req.Email,
+				"path":   c.Request.URL.Path,
+				"method": c.Request.Method,
+			})
 			response.Error(c, http.StatusConflict, "email_unverified", "Account with this email already exists but is not verified. Please request a new verification code.", nil)
 		case errors.Is(err, repo.ErrEmailExists):
-			log.Printf("email conflict in Register: email=%s err=%v", req.Email, err)
+			h.logger.Info("email_conflict_in_register", map[string]any{
+				"email":  req.Email,
+				"path":   c.Request.URL.Path,
+				"method": c.Request.Method,
+			})
 			response.Error(c, http.StatusConflict, "email_already_exists", "Email is already in use", nil)
 		case errors.Is(err, repo.ErrUsernameExists):
-			log.Printf("username conflict in Register: username=%s err=%v", req.Username, err)
+			h.logger.Info("username_conflict_in_register", map[string]any{
+				"username": req.Username,
+				"path":     c.Request.URL.Path,
+				"method":   c.Request.Method,
+			})
 			response.Error(c, http.StatusConflict, "username_already_exists", "Username is already in use", nil)
 		default:
-			log.Printf("internal error in Register: email=%s username=%s err=%v", req.Email, req.Username, err)
+			h.logger.Error("internal_error_in_register", map[string]any{
+				"email":    req.Email,
+				"username": req.Username,
+				"path":     c.Request.URL.Path,
+				"method":   c.Request.Method,
+				"error":    err.Error(),
+			})
 			response.Error(c, http.StatusInternalServerError, "internal_error", "Internal server error", nil)
 		}
 		return
@@ -94,12 +121,24 @@ func (h *Handler) Login(c *gin.Context) {
 	user, access, refresh, err := h.auth.Login(c.Request.Context(), req.Email, req.Password)
 	if err != nil {
 		switch {
+		case errors.Is(err, authuc.ErrAccountDeleted):
+			h.logger.Info("account_deleted_in_login", map[string]any{
+				"email":  req.Email,
+				"path":   c.Request.URL.Path,
+				"method": c.Request.Method,
+			})
+			response.Error(c, http.StatusForbidden, "account_deleted", "Your account was deleted. Would you like to restore it?", nil)
 		case errors.Is(err, authuc.ErrInvalidCredentials):
 			response.Error(c, http.StatusUnauthorized, "invalid_credentials", "Invalid email or password", nil)
 		case errors.Is(err, authuc.ErrEmailNotVerified):
 			response.Error(c, http.StatusForbidden, "email_not_verified", "Email is not verified", nil)
 		default:
-			log.Printf("internal error in Login: email=%s err=%v", req.Email, err)
+			h.logger.Error("internal_error_in_login", map[string]any{
+				"email":  req.Email,
+				"path":   c.Request.URL.Path,
+				"method": c.Request.Method,
+				"error":  err.Error(),
+			})
 			response.Error(c, http.StatusInternalServerError, "internal_error", "Internal server error", nil)
 		}
 		return
@@ -145,7 +184,11 @@ func (h *Handler) Refresh(c *gin.Context) {
 		case errors.Is(err, authuc.ErrEmailNotVerified):
 			response.Error(c, http.StatusForbidden, "email_not_verified", "Email is not verified", nil)
 		default:
-			log.Printf("internal error in Refresh: err=%v", err)
+			h.logger.Error("internal_error_in_refresh", map[string]any{
+				"path":   c.Request.URL.Path,
+				"method": c.Request.Method,
+				"error":  err.Error(),
+			})
 			response.Error(c, http.StatusInternalServerError, "internal_error", "Internal server error", nil)
 		}
 		return
@@ -192,7 +235,12 @@ func (h *Handler) ResendVerification(c *gin.Context) {
 			})
 			return
 		default:
-			log.Printf("internal error in ResendVerification: email=%s err=%v", req.Email, err)
+			h.logger.Error("internal_error_in_resend_verification", map[string]any{
+				"email":  req.Email,
+				"path":   c.Request.URL.Path,
+				"method": c.Request.Method,
+				"error":  err.Error(),
+			})
 			response.Error(c, http.StatusInternalServerError, "internal_error", "Internal server error", nil)
 			return
 		}
@@ -235,7 +283,12 @@ func (h *Handler) VerifyEmail(c *gin.Context) {
 		case errors.Is(err, authuc.ErrVerificationAttemptsExceeded):
 			response.Error(c, http.StatusBadRequest, "verification_attempts_exceeded", "Verification attempts limit exceeded. Please request a new code.", nil)
 		default:
-			log.Printf("internal error in VerifyEmail: email=%s err=%v", req.Email, err)
+			h.logger.Error("internal_error_in_verify_email", map[string]any{
+				"email":  req.Email,
+				"path":   c.Request.URL.Path,
+				"method": c.Request.Method,
+				"error":  err.Error(),
+			})
 			response.Error(c, http.StatusInternalServerError, "internal_error", "Internal server error", nil)
 		}
 		return

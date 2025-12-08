@@ -453,6 +453,66 @@ func (h *Handler) VerifyEmailChange(c *gin.Context) {
 	c.JSON(http.StatusOK, toProfileResponse(user))
 }
 
+// RestoreAccount godoc
+// @Summary      Восстановление удалённого аккаунта
+// @Description  Восстанавливает мягко удалённый аккаунт по email и паролю. Возвращает профиль пользователя. Для получения токенов используйте /api/v1/auth/login.
+// @Tags         user
+// @Accept       json
+// @Produce      json
+// @Param        payload  body      RestoreAccountRequest  true  "Данные для восстановления"
+// @Success      200      {object}  ProfileResponse
+// @Failure      400      {object}  response.ErrorBody
+// @Failure      401      {object}  response.ErrorBody
+// @Failure      500      {object}  response.ErrorBody
+// @Router       /api/v1/users/restore [post]
+func (h *Handler) RestoreAccount(c *gin.Context) {
+	var req RestoreAccountRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, http.StatusBadRequest, "invalid_request", "Invalid request body", err.Error())
+		return
+	}
+
+	user, err := h.users.RestoreAccount(c.Request.Context(), req.Email, req.Password)
+	if err != nil {
+		switch {
+		case errors.Is(err, useruc.ErrInvalidPassword):
+			h.logger.Info("invalid_password_in_restore_account", map[string]any{
+				"email":  req.Email,
+				"path":   c.Request.URL.Path,
+				"method": c.Request.Method,
+			})
+			response.Error(c, http.StatusUnauthorized, "invalid_credentials", "Invalid email or password", nil)
+		case errors.Is(err, useruc.ErrAccountNotDeleted):
+			h.logger.Info("account_not_deleted_in_restore", map[string]any{
+				"email":  req.Email,
+				"path":   c.Request.URL.Path,
+				"method": c.Request.Method,
+			})
+			response.Error(c, http.StatusBadRequest, "account_not_deleted", "Account is not deleted", nil)
+		case errors.Is(err, repo.ErrNotFound):
+			// For security, return the same error as invalid password
+			h.logger.Info("user_not_found_in_restore", map[string]any{
+				"email":  req.Email,
+				"path":   c.Request.URL.Path,
+				"method": c.Request.Method,
+			})
+			response.Error(c, http.StatusUnauthorized, "invalid_credentials", "Invalid email or password", nil)
+		default:
+			ctx := map[string]any{
+				"email":  req.Email,
+				"path":   c.Request.URL.Path,
+				"method": c.Request.Method,
+				"error":  err.Error(),
+			}
+			h.logger.Error("internal_error_in_restore_account", ctx)
+			response.Error(c, http.StatusInternalServerError, "internal_error", "Internal server error", nil)
+		}
+		return
+	}
+
+	c.JSON(http.StatusOK, toProfileResponse(user))
+}
+
 // toProfileResponse маппит доменную модель в DTO.
 func toProfileResponse(u *domain.User) ProfileResponse {
 	return ProfileResponse{

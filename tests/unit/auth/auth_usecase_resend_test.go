@@ -35,7 +35,29 @@ func (r *fakeUserRepo) GetByEmail(_ context.Context, email string) (*domain.User
 	if !ok {
 		return nil, repo.ErrNotFound
 	}
+	// Возвращаем только если не удалён
+	if u.DeletedAt != nil {
+		return nil, repo.ErrNotFound
+	}
 	return u, nil
+}
+
+func (r *fakeUserRepo) GetByEmailIncludingDeleted(_ context.Context, email string) (*domain.User, error) {
+	u, ok := r.usersByEmail[email]
+	if !ok {
+		return nil, repo.ErrNotFound
+	}
+	return u, nil
+}
+
+func (r *fakeUserRepo) RestoreAccount(_ context.Context, id uuid.UUID) error {
+	for _, u := range r.usersByEmail {
+		if u.ID == id && u.DeletedAt != nil {
+			u.DeletedAt = nil
+			return nil
+		}
+	}
+	return repo.ErrNotFound
 }
 
 type fakeEmailVerifRepo struct {

@@ -91,6 +91,43 @@ func TestUser_Profile_Flow(t *testing.T) {
 	req.Header.Set("Authorization", "Bearer "+access)
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusNotFound, w.Code, w.Body.String())
+
+	// 6. Попытка логина после удаления -> 403 account_deleted
+	loginBody = `{"email":"uflow@example.com","password":"Password123!"}`
+	w = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", strings.NewReader(loginBody))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusForbidden, w.Code, w.Body.String())
+	var errorResp map[string]interface{}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &errorResp))
+	require.Equal(t, "account_deleted", errorResp["error"].(map[string]interface{})["code"])
+
+	// 7. Восстановление аккаунта через POST /api/v1/users/restore
+	restoreBody := `{"email":"uflow@example.com","password":"Password123!"}`
+	w = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/users/restore", strings.NewReader(restoreBody))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	var restoredProfile userhandler.ProfileResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &restoredProfile))
+	require.Equal(t, "uflownew", restoredProfile.Username)
+	require.Equal(t, "intermediate", restoredProfile.TrainingLevel)
+
+	// 8. Повторный логин после восстановления -> должен быть успешным
+	loginBody = `{"email":"uflow@example.com","password":"Password123!"}`
+	w = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", strings.NewReader(loginBody))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	var loginRespAfterRestore authhandler.LoginResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &loginRespAfterRestore))
+	require.NotEmpty(t, loginRespAfterRestore.Tokens.AccessToken)
+	require.NotEmpty(t, loginRespAfterRestore.Tokens.RefreshToken)
 }
 
 // TestUser_GetByID проверяет endpoint GET /api/v1/users/:id:
@@ -197,4 +234,113 @@ func TestUser_GetByID(t *testing.T) {
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/users/"+user1ID, nil)
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusUnauthorized, w.Code, w.Body.String())
+}
+
+// TestUser_Restore_Account проверяет полный сценарий восстановления аккаунта:
+// регистрация -> подтверждение email -> логин -> удаление -> попытка логина (403) ->
+// попытка регистрации (409) -> восстановление -> повторный логин -> проверка профиля.
+func TestUser_Restore_Account(t *testing.T) {
+	router := testcfg.NewTestRouter(t)
+
+	// 1. Регистрация пользователя
+	registerBody := `{"email":"restore@example.com","password":"Password123!","username":"restoreuser"}`
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/register", strings.NewReader(registerBody))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
+
+	var regResp authhandler.RegisterResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &regResp))
+	require.Equal(t, "restore@example.com", regResp.Email)
+	require.Equal(t, "restoreuser", regResp.Username)
+	userID := regResp.UserID
+
+	// 2. Подтверждение email
+	testcfg.VerifyUserEmailForTests(t, regResp.Email)
+
+	// 3. Логин и получение токена
+	loginBody := `{"email":"restore@example.com","password":"Password123!"}`
+	w = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", strings.NewReader(loginBody))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	var loginResp authhandler.LoginResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &loginResp))
+	access := loginResp.Tokens.AccessToken
+	require.NotEmpty(t, access)
+
+	// 4. Удаление аккаунта
+	deleteBody := `{"password":"Password123!"}`
+	w = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodDelete, "/api/v1/users/me", strings.NewReader(deleteBody))
+	req.Header.Set("Authorization", "Bearer "+access)
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusNoContent, w.Code, w.Body.String())
+
+	// 5. Попытка логина -> должна вернуть 403 с account_deleted
+	loginBody = `{"email":"restore@example.com","password":"Password123!"}`
+	w = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", strings.NewReader(loginBody))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusForbidden, w.Code, w.Body.String())
+	var errorResp map[string]interface{}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &errorResp))
+	require.Equal(t, "account_deleted", errorResp["error"].(map[string]interface{})["code"])
+
+	// 6. Попытка регистрации с тем же email -> должна вернуть 409 с account_deleted
+	registerBody = `{"email":"restore@example.com","password":"NewPassword123!","username":"newuser"}`
+	w = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/auth/register", strings.NewReader(registerBody))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusConflict, w.Code, w.Body.String())
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &errorResp))
+	require.Equal(t, "account_deleted", errorResp["error"].(map[string]interface{})["code"])
+
+	// 7. Восстановление аккаунта через POST /api/v1/users/restore -> 200
+	restoreBody := `{"email":"restore@example.com","password":"Password123!"}`
+	w = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/users/restore", strings.NewReader(restoreBody))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	var restoredProfile userhandler.ProfileResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &restoredProfile))
+	require.Equal(t, userID, restoredProfile.ID)
+	require.Equal(t, "restore@example.com", restoredProfile.Email)
+	require.Equal(t, "restoreuser", restoredProfile.Username)
+
+	// 8. Повторный логин после восстановления -> должен быть успешным
+	loginBody = `{"email":"restore@example.com","password":"Password123!"}`
+	w = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", strings.NewReader(loginBody))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	var loginRespAfterRestore authhandler.LoginResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &loginRespAfterRestore))
+	require.Equal(t, userID, loginRespAfterRestore.UserID)
+	require.NotEmpty(t, loginRespAfterRestore.Tokens.AccessToken)
+	require.NotEmpty(t, loginRespAfterRestore.Tokens.RefreshToken)
+
+	// 9. Проверка что профиль доступен через GET /users/me
+	newAccess := loginRespAfterRestore.Tokens.AccessToken
+	w = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/users/me", nil)
+	req.Header.Set("Authorization", "Bearer "+newAccess)
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	var profile userhandler.ProfileResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &profile))
+	require.Equal(t, userID, profile.ID)
+	require.Equal(t, "restore@example.com", profile.Email)
+	require.Equal(t, "restoreuser", profile.Username)
 }

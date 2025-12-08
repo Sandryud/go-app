@@ -46,6 +46,10 @@ type Service interface {
 	// VerifyEmailChange подтверждает изменение email по коду.
 	// Обновляет email пользователя и устанавливает IsEmailVerified = true.
 	VerifyEmailChange(ctx context.Context, userID uuid.UUID, code string) (*domain.User, error)
+
+	// RestoreAccount восстанавливает удалённый аккаунт по email и паролю.
+	// Возвращает пользователя.
+	RestoreAccount(ctx context.Context, email, password string) (*domain.User, error)
 }
 
 // ProfileUpdateInput описывает допустимые изменения в профиле пользователя
@@ -69,6 +73,7 @@ var (
 	ErrVerificationCodeInvalid      = fmt.Errorf("verification code invalid")
 	ErrVerificationAttemptsExceeded = fmt.Errorf("verification attempts exceeded")
 	ErrInvalidPassword              = fmt.Errorf("invalid password")
+	ErrAccountNotDeleted            = fmt.Errorf("account is not deleted")
 )
 
 type service struct {
@@ -342,4 +347,43 @@ func (s *service) createAndSendEmailChangeCode(ctx context.Context, user *domain
 	}
 
 	return nil
+}
+
+// RestoreAccount восстанавливает удалённый аккаунт по email и паролю.
+func (s *service) RestoreAccount(ctx context.Context, email, rawPassword string) (*domain.User, error) {
+	if email == "" || rawPassword == "" {
+		return nil, fmt.Errorf("email and password are required")
+	}
+
+	// Находим пользователя включая удалённых
+	user, err := s.users.GetByEmailIncludingDeleted(ctx, email)
+	if err != nil {
+		if err == repo.ErrNotFound {
+			return nil, ErrInvalidPassword
+		}
+		return nil, err
+	}
+
+	// Проверяем пароль
+	if err := password.Compare(user.PasswordHash, rawPassword); err != nil {
+		return nil, ErrInvalidPassword
+	}
+
+	// Проверяем, что аккаунт действительно удалён
+	if !user.IsDeleted() {
+		return nil, ErrAccountNotDeleted
+	}
+
+	// Восстанавливаем аккаунт
+	if err := s.users.RestoreAccount(ctx, user.ID); err != nil {
+		return nil, fmt.Errorf("failed to restore account: %w", err)
+	}
+
+	// Перезагружаем пользователя из БД для синхронизации доменной модели
+	restoredUser, err := s.users.GetByID(ctx, user.ID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get restored user: %w", err)
+	}
+
+	return restoredUser, nil
 }
