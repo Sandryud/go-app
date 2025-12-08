@@ -62,3 +62,8 @@ type ChangeEmailResponse struct {
 type VerifyEmailChangeRequest struct {
 	Code string `json:"code" binding:"required,len=6,numeric"`
 }
+
+// DeleteAccountRequest описывает тело запроса для удаления аккаунта.
+type DeleteAccountRequest struct {
+	Password string `json:"password" binding:"required"`
+}

@@ -195,14 +195,17 @@ func (h *Handler) UpdateMe(c *gin.Context) {
 
 // DeleteMe godoc
 // @Summary      Удалить текущий аккаунт
-// @Description  Soft-delete (устанавливает deleted_at, не удаляя физически).
+// @Description  Soft-delete (устанавливает deleted_at, не удаляя физически). Требует подтверждения пароля.
 // @Tags         user
 // @Security     BearerAuth
+// @Accept       json
 // @Produce      json
-// @Success      204  "Аккаунт удалён"
-// @Failure      401  {object}  response.ErrorBody
-// @Failure      404  {object}  response.ErrorBody
-// @Failure      500  {object}  response.ErrorBody
+// @Param        payload  body      DeleteAccountRequest  true  "Пароль для подтверждения"
+// @Success      204      "Аккаунт удалён"
+// @Failure      400      {object}  response.ErrorBody
+// @Failure      401      {object}  response.ErrorBody
+// @Failure      404      {object}  response.ErrorBody
+// @Failure      500      {object}  response.ErrorBody
 // @Router       /api/v1/users/me [delete]
 func (h *Handler) DeleteMe(c *gin.Context) {
 	userID, err := getUserIDFromContext(c)
@@ -211,22 +214,26 @@ func (h *Handler) DeleteMe(c *gin.Context) {
 		return
 	}
 
-	if err := h.users.DeleteAccount(c.Request.Context(), userID); err != nil {
+	var req DeleteAccountRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, http.StatusBadRequest, "invalid_request", "Некорректное тело запроса", err.Error())
+		return
+	}
+
+	if err := h.users.DeleteAccount(c.Request.Context(), userID, req.Password); err != nil {
+		if errors.Is(err, useruc.ErrInvalidPassword) {
+			h.logger.Info("invalid_password_in_delete_me", getRequestContext(c, userID))
+			response.Error(c, http.StatusUnauthorized, "invalid_password", "Неверный пароль", nil)
+			return
+		}
 		if errors.Is(err, repo.ErrNotFound) {
-			h.logger.Info("user_not_found_in_delete_me", map[string]any{
-				"user_id": userID.String(),
-				"path":    c.Request.URL.Path,
-				"method":  c.Request.Method,
-			})
+			h.logger.Info("user_not_found_in_delete_me", getRequestContext(c, userID))
 			response.Error(c, http.StatusNotFound, "user_not_found", "Пользователь не найден", nil)
 			return
 		}
-		h.logger.Error("internal_error_in_delete_me", map[string]any{
-			"user_id": userID.String(),
-			"path":    c.Request.URL.Path,
-			"method":  c.Request.Method,
-			"error":   err.Error(),
-		})
+		ctx := getRequestContext(c, userID)
+		ctx["error"] = err.Error()
+		h.logger.Error("internal_error_in_delete_me", ctx)
 		response.Error(c, http.StatusInternalServerError, "internal_error", "Внутренняя ошибка сервера", nil)
 		return
 	}
