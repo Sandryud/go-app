@@ -1,4 +1,4 @@
-.PHONY: help run build test clean migrate-up migrate-down migrate-version migrate-steps
+.PHONY: help run build test clean migrate-up migrate-down migrate-version migrate-steps swagger
 
 help: ## Показать это сообщение с помощью
 	@echo 'Usage: make [target]'
@@ -54,16 +54,6 @@ vet: ## Запустить go vet
 fmt: ## Форматировать код
 	@go fmt ./...
 
-check-db: ## Проверить подключение к базе данных
-	@echo "Проверка подключения к базе данных..."
-	@echo "Убедитесь, что PostgreSQL запущен: make docker-up"
-	@DB_HOST=localhost go run scripts/check-db.go
-
-check-db-full: docker-up ## Запустить PostgreSQL и проверить подключение
-	@echo "Ожидание готовности PostgreSQL (10 секунд)..."
-	@sleep 10
-	@go run scripts/check-db.go
-
 test-integration: ## Запустить интеграционные тесты (используется TEST_DB_NAME=workout_app_test)
 	@echo "Запуск интеграционных тестов (TEST_DB_NAME=workout_app_test)..."
 	@export TEST_DB_NAME=workout_app_test; \
@@ -83,4 +73,13 @@ docker-logs: ## Показать логи Docker Compose
 
 docker-build: ## Собрать Docker образ приложения
 	@docker-compose build app
+
+swagger: ## Сгенерировать Swagger/OpenAPI документацию
+	@echo "Генерация Swagger документации..."
+	@if ! command -v swag &> /dev/null; then \
+		echo "Ошибка: swag не найден. Установите его командой: go install github.com/swaggo/swag/cmd/swag@latest"; \
+		exit 1; \
+	fi
+	@swag init -g cmd/server/main.go -o api/swagger --parseDependency --parseInternal
+	@echo "Swagger документация успешно сгенерирована в api/swagger/"
 

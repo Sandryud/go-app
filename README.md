@@ -196,3 +196,78 @@ docker-compose up
 - `make docker-build` - Собрать Docker образ приложения
 - `make docker-logs` - Показать логи Docker контейнеров
 
+#### Swagger/OpenAPI документация
+
+- `make swagger` - Сгенерировать Swagger/OpenAPI документацию
+
+### Генерация Swagger документации
+
+Проект использует [swaggo/swag](https://github.com/swaggo/swag) для автоматической генерации Swagger/OpenAPI документации из аннотаций в коде.
+
+#### Установка swag CLI
+
+Перед первым использованием необходимо установить инструмент `swag`:
+
+```bash
+go install github.com/swaggo/swag/cmd/swag@latest
+```
+
+Убедитесь, что `$GOPATH/bin` или `$HOME/go/bin` добавлен в `PATH`.
+
+#### Генерация документации
+
+После добавления или изменения аннотаций Swagger в хендлерах, выполните:
+
+```bash
+make swagger
+```
+
+Или напрямую:
+
+```bash
+swag init -g cmd/server/main.go -o api/swagger --parseDependency --parseInternal
+```
+
+Команда генерирует следующие файлы в `api/swagger/`:
+- `docs.go` - Go код с документацией
+- `swagger.json` - OpenAPI спецификация в формате JSON
+- `swagger.yaml` - OpenAPI спецификация в формате YAML
+
+#### Просмотр документации
+
+После запуска сервера, Swagger UI доступен по адресу:
+
+```
+http://localhost:8080/swagger/index.html
+```
+
+#### Аннотации Swagger
+
+Документация генерируется из аннотаций в коде:
+
+**В `cmd/server/main.go`:**
+```go
+// @title           Workout App API
+// @version         1.0
+// @description     API фитнес-приложения
+// @BasePath        /
+```
+
+**В хендлерах:**
+```go
+// @Summary      Регистрация пользователя
+// @Description  Регистрация по email/паролю/username
+// @Tags         auth
+// @Accept       json
+// @Produce      json
+// @Param        payload  body      RegisterRequest  true  "Данные для регистрации"
+// @Success      201      {object}  RegisterResponse
+// @Failure      400      {object}  response.ErrorBody
+// @Router       /api/v1/auth/register [post]
+func (h *Handler) Register(c *gin.Context) {
+    // ...
+}
+```
+
+Подробнее о доступных аннотациях: [swaggo/swag документация](https://github.com/swaggo/swag)
+

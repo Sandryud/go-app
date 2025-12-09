@@ -1,6 +1,6 @@
 basePath: /
 definitions:
-  auth.LoginRequest:
+  internal_handler_auth.LoginRequest:
     properties:
       email:
         type: string
@@ -10,25 +10,25 @@ definitions:
     - email
     - password
     type: object
-  auth.LoginResponse:
+  internal_handler_auth.LoginResponse:
     properties:
       email:
         type: string
       tokens:
-        $ref: '#/definitions/auth.TokenPair'
+        $ref: '#/definitions/workout-app_internal_handler_response.TokenPair'
       user_id:
         type: string
       username:
         type: string
     type: object
-  auth.RefreshRequest:
+  internal_handler_auth.RefreshRequest:
     properties:
       refresh_token:
         type: string
     required:
     - refresh_token
     type: object
-  auth.RegisterRequest:
+  internal_handler_auth.RegisterRequest:
     properties:
       email:
         type: string
@@ -36,6 +36,8 @@ definitions:
         minLength: 8
         type: string
       username:
+        description: Username должен состоять только из букв и цифр (без пробелов
+          и спецсимволов).
         maxLength: 32
         minLength: 3
         type: string
@@ -44,22 +46,80 @@ definitions:
     - password
     - username
     type: object
-  auth.TokenPair:
+  internal_handler_auth.RegisterResponse:
     properties:
-      access_token:
+      email:
         type: string
-      refresh_token:
+      message:
+        type: string
+      user_id:
+        type: string
+      username:
         type: string
     type: object
-  response.ErrorBody:
+  internal_handler_auth.ResendVerificationRequest:
     properties:
-      code:
+      email:
         type: string
-      details: {}
+    required:
+    - email
+    type: object
+  internal_handler_auth.ResendVerificationResponse:
+    properties:
       message:
         type: string
     type: object
-  user.ProfileResponse:
+  internal_handler_auth.RestoreAccountRequest:
+    properties:
+      email:
+        type: string
+      password:
+        type: string
+    required:
+    - email
+    - password
+    type: object
+  internal_handler_auth.RestoreAccountResponse:
+    properties:
+      email:
+        type: string
+      tokens:
+        $ref: '#/definitions/workout-app_internal_handler_response.TokenPair'
+      user_id:
+        type: string
+      username:
+        type: string
+    type: object
+  internal_handler_auth.VerifyEmailRequest:
+    properties:
+      code:
+        type: string
+      email:
+        type: string
+    required:
+    - code
+    - email
+    type: object
+  internal_handler_user.ChangeEmailRequest:
+    properties:
+      new_email:
+        type: string
+    required:
+    - new_email
+    type: object
+  internal_handler_user.ChangeEmailResponse:
+    properties:
+      message:
+        type: string
+    type: object
+  internal_handler_user.DeleteAccountRequest:
+    properties:
+      password:
+        type: string
+    required:
+    - password
+    type: object
+  internal_handler_user.ProfileResponse:
     properties:
       avatar_url:
         type: string
@@ -86,7 +146,7 @@ definitions:
       username:
         type: string
     type: object
-  user.ProfileUpdateRequest:
+  internal_handler_user.ProfileUpdateRequest:
     properties:
       avatar_url:
         type: string
@@ -101,6 +161,56 @@ definitions:
       training_level:
         type: string
       username:
+        description: Username при обновлении также ограничен только буквами и цифрами.
+        maxLength: 32
+        minLength: 3
+        type: string
+    type: object
+  internal_handler_user.PublicProfileResponse:
+    properties:
+      avatar_url:
+        type: string
+      birth_date:
+        type: string
+      created_at:
+        type: string
+      first_name:
+        type: string
+      gender:
+        type: string
+      id:
+        type: string
+      last_name:
+        type: string
+      role:
+        type: string
+      training_level:
+        type: string
+      updated_at:
+        type: string
+      username:
+        type: string
+    type: object
+  internal_handler_user.VerifyEmailChangeRequest:
+    properties:
+      code:
+        type: string
+    required:
+    - code
+    type: object
+  workout-app_internal_handler_response.ErrorBody:
+    properties:
+      code:
+        type: string
+      details: {}
+      message:
+        type: string
+    type: object
+  workout-app_internal_handler_response.TokenPair:
+    properties:
+      access_token:
+        type: string
+      refresh_token:
         type: string
     type: object
 info:
@@ -110,6 +220,36 @@ info:
   title: Workout App API
   version: "1.0"
 paths:
+  /api/v1/admin/users:
+    get:
+      description: Возвращает список всех активных пользователей. Доступно только
+        для роли admin.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/internal_handler_user.ProfileResponse'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/workout-app_internal_handler_response.ErrorBody'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/workout-app_internal_handler_response.ErrorBody'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/workout-app_internal_handler_response.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: Получить список всех пользователей (админ)
+      tags:
+      - user
   /api/v1/auth/login:
     post:
       consumes:
@@ -121,26 +261,26 @@ paths:
         name: payload
         required: true
         schema:
-          $ref: '#/definitions/auth.LoginRequest'
+          $ref: '#/definitions/internal_handler_auth.LoginRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/auth.LoginResponse'
+            $ref: '#/definitions/internal_handler_auth.LoginResponse'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/response.ErrorBody'
+            $ref: '#/definitions/workout-app_internal_handler_response.ErrorBody'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/response.ErrorBody'
+            $ref: '#/definitions/workout-app_internal_handler_response.ErrorBody'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/response.ErrorBody'
+            $ref: '#/definitions/workout-app_internal_handler_response.ErrorBody'
       summary: Вход по email и паролю
       tags:
       - auth
@@ -155,26 +295,26 @@ paths:
         name: payload
         required: true
         schema:
-          $ref: '#/definitions/auth.RefreshRequest'
+          $ref: '#/definitions/internal_handler_auth.RefreshRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/auth.LoginResponse'
+            $ref: '#/definitions/internal_handler_auth.LoginResponse'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/response.ErrorBody'
+            $ref: '#/definitions/workout-app_internal_handler_response.ErrorBody'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/response.ErrorBody'
+            $ref: '#/definitions/workout-app_internal_handler_response.ErrorBody'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/response.ErrorBody'
+            $ref: '#/definitions/workout-app_internal_handler_response.ErrorBody'
       summary: Обновление токенов
       tags:
       - auth
@@ -190,49 +330,210 @@ paths:
         name: payload
         required: true
         schema:
-          $ref: '#/definitions/auth.RegisterRequest'
+          $ref: '#/definitions/internal_handler_auth.RegisterRequest'
       produces:
       - application/json
       responses:
         "201":
           description: Created
           schema:
-            $ref: '#/definitions/auth.LoginResponse'
+            $ref: '#/definitions/internal_handler_auth.RegisterResponse'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/response.ErrorBody'
+            $ref: '#/definitions/workout-app_internal_handler_response.ErrorBody'
         "409":
           description: Conflict
           schema:
-            $ref: '#/definitions/response.ErrorBody'
+            $ref: '#/definitions/workout-app_internal_handler_response.ErrorBody'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/response.ErrorBody'
+            $ref: '#/definitions/workout-app_internal_handler_response.ErrorBody'
       summary: Регистрация пользователя
       tags:
       - auth
+  /api/v1/auth/resend-verification:
+    post:
+      consumes:
+      - application/json
+      description: Отправляет новый код подтверждения на указанный email, если аккаунт
+        ещё не подтверждён.
+      parameters:
+      - description: Email для повторной отправки кода
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/internal_handler_auth.ResendVerificationRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_handler_auth.ResendVerificationResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/workout-app_internal_handler_response.ErrorBody'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/workout-app_internal_handler_response.ErrorBody'
+      summary: Повторная отправка кода подтверждения email
+      tags:
+      - auth
+  /api/v1/auth/restore:
+    post:
+      consumes:
+      - application/json
+      description: Восстанавливает мягко удалённый аккаунт по email и паролю. Возвращает
+        профиль пользователя и пару access/refresh токенов.
+      parameters:
+      - description: Данные для восстановления
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/internal_handler_auth.RestoreAccountRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_handler_auth.RestoreAccountResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/workout-app_internal_handler_response.ErrorBody'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/workout-app_internal_handler_response.ErrorBody'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/workout-app_internal_handler_response.ErrorBody'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/workout-app_internal_handler_response.ErrorBody'
+      summary: Восстановление удалённого аккаунта
+      tags:
+      - auth
+  /api/v1/auth/verify-email:
+    post:
+      consumes:
+      - application/json
+      description: Подтверждает email пользователя по одноразовому коду и возвращает
+        пару access/refresh токенов.
+      parameters:
+      - description: Данные для подтверждения email
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/internal_handler_auth.VerifyEmailRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_handler_auth.LoginResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/workout-app_internal_handler_response.ErrorBody'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/workout-app_internal_handler_response.ErrorBody'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/workout-app_internal_handler_response.ErrorBody'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/workout-app_internal_handler_response.ErrorBody'
+      summary: Подтверждение email кодом
+      tags:
+      - auth
+  /api/v1/users/{id}:
+    get:
+      description: Возвращает публичный профиль пользователя по идентификатору. Доступно
+        любому аутентифицированному пользователю.
+      parameters:
+      - description: ID пользователя (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_handler_user.PublicProfileResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/workout-app_internal_handler_response.ErrorBody'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/workout-app_internal_handler_response.ErrorBody'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/workout-app_internal_handler_response.ErrorBody'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/workout-app_internal_handler_response.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: Получить публичный профиль пользователя по ID
+      tags:
+      - user
   /api/v1/users/me:
     delete:
-      description: Soft-delete (устанавливает deleted_at, не удаляя физически).
+      consumes:
+      - application/json
+      description: Soft-delete (устанавливает deleted_at, не удаляя физически). Требует
+        подтверждения пароля.
+      parameters:
+      - description: Пароль для подтверждения
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/internal_handler_user.DeleteAccountRequest'
       produces:
       - application/json
       responses:
         "204":
           description: Аккаунт удалён
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/workout-app_internal_handler_response.ErrorBody'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/response.ErrorBody'
+            $ref: '#/definitions/workout-app_internal_handler_response.ErrorBody'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/response.ErrorBody'
+            $ref: '#/definitions/workout-app_internal_handler_response.ErrorBody'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/response.ErrorBody'
+            $ref: '#/definitions/workout-app_internal_handler_response.ErrorBody'
       security:
       - BearerAuth: []
       summary: Удалить текущий аккаунт
@@ -246,19 +547,19 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/user.ProfileResponse'
+            $ref: '#/definitions/internal_handler_user.ProfileResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/response.ErrorBody'
+            $ref: '#/definitions/workout-app_internal_handler_response.ErrorBody'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/response.ErrorBody'
+            $ref: '#/definitions/workout-app_internal_handler_response.ErrorBody'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/response.ErrorBody'
+            $ref: '#/definitions/workout-app_internal_handler_response.ErrorBody'
       security:
       - BearerAuth: []
       summary: Получить профиль текущего пользователя
@@ -275,37 +576,123 @@ paths:
         name: payload
         required: true
         schema:
-          $ref: '#/definitions/user.ProfileUpdateRequest'
+          $ref: '#/definitions/internal_handler_user.ProfileUpdateRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/user.ProfileResponse'
+            $ref: '#/definitions/internal_handler_user.ProfileResponse'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/response.ErrorBody'
+            $ref: '#/definitions/workout-app_internal_handler_response.ErrorBody'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/response.ErrorBody'
+            $ref: '#/definitions/workout-app_internal_handler_response.ErrorBody'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/response.ErrorBody'
+            $ref: '#/definitions/workout-app_internal_handler_response.ErrorBody'
         "409":
           description: Conflict
           schema:
-            $ref: '#/definitions/response.ErrorBody'
+            $ref: '#/definitions/workout-app_internal_handler_response.ErrorBody'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/response.ErrorBody'
+            $ref: '#/definitions/workout-app_internal_handler_response.ErrorBody'
       security:
       - BearerAuth: []
       summary: Обновить профиль текущего пользователя
+      tags:
+      - user
+  /api/v1/users/me/change-email:
+    post:
+      consumes:
+      - application/json
+      description: Отправляет код подтверждения на новый email для изменения email
+        пользователя.
+      parameters:
+      - description: Новый email
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/internal_handler_user.ChangeEmailRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_handler_user.ChangeEmailResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/workout-app_internal_handler_response.ErrorBody'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/workout-app_internal_handler_response.ErrorBody'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/workout-app_internal_handler_response.ErrorBody'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/workout-app_internal_handler_response.ErrorBody'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/workout-app_internal_handler_response.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: Запросить изменение email
+      tags:
+      - user
+  /api/v1/users/me/verify-email-change:
+    post:
+      consumes:
+      - application/json
+      description: Подтверждает изменение email по коду, отправленному на новый email.
+        Обновляет email пользователя.
+      parameters:
+      - description: Код подтверждения
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/internal_handler_user.VerifyEmailChangeRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_handler_user.ProfileResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/workout-app_internal_handler_response.ErrorBody'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/workout-app_internal_handler_response.ErrorBody'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/workout-app_internal_handler_response.ErrorBody'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/workout-app_internal_handler_response.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: Подтвердить изменение email
       tags:
       - user
 securityDefinitions:
