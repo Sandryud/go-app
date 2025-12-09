@@ -28,6 +28,7 @@ func (r *fakeUserRepo) GetByUsername(context.Context, string) (*domain.User, err
 	return nil, repo.ErrNotFound
 }
 func (r *fakeUserRepo) Update(context.Context, *domain.User) error   { return nil }
+func (r *fakeUserRepo) UpdatePassword(context.Context, uuid.UUID, string) error { return nil }
 func (r *fakeUserRepo) SoftDelete(context.Context, uuid.UUID) error  { return nil }
 func (r *fakeUserRepo) List(context.Context) ([]*domain.User, error) { return nil, nil }
 func (r *fakeUserRepo) GetByEmail(_ context.Context, email string) (*domain.User, error) {
@@ -91,6 +92,22 @@ func (r *fakeEmailVerifRepo) DeleteEmailChangeByUserID(_ context.Context, userID
 	return nil
 }
 
+// fakePasswordResetRepo - заглушка для PasswordResetRepository.
+// Не используется напрямую в тестах ResendVerificationCode, но требуется
+// для инициализации authuc.NewService, так как сервис зависит от всех репозиториев.
+type fakePasswordResetRepo struct{}
+
+func (r *fakePasswordResetRepo) Create(context.Context, *domain.PasswordReset) error { return nil }
+func (r *fakePasswordResetRepo) GetActiveByUserID(context.Context, uuid.UUID) (*domain.PasswordReset, error) {
+	return nil, repo.ErrNotFound
+}
+func (r *fakePasswordResetRepo) GetByID(context.Context, int64) (*domain.PasswordReset, error) {
+	return nil, repo.ErrNotFound
+}
+func (r *fakePasswordResetRepo) IncrementAttempts(context.Context, int64) error { return nil }
+func (r *fakePasswordResetRepo) MarkAsUsed(context.Context, int64) error        { return nil }
+func (r *fakePasswordResetRepo) DeleteByUserID(context.Context, uuid.UUID) error { return nil }
+
 type fakeEmailSender struct {
 	sentTo string
 	code   string
@@ -121,9 +138,10 @@ func (f *fakeJWT) ParseRefreshToken(string) (*jwtsvc.Claims, error)          { r
 func TestResendVerificationCode_NoUser_SilentSuccess(t *testing.T) {
 	userRepo := &fakeUserRepo{usersByEmail: map[string]*domain.User{}}
 	verifRepo := &fakeEmailVerifRepo{}
+	passwordResetRepo := &fakePasswordResetRepo{}
 	sender := &fakeEmailSender{}
 
-	svc := authuc.NewService(userRepo, verifRepo, &fakeJWT{}, sender, 15*time.Minute, 5, 6)
+	svc := authuc.NewService(userRepo, verifRepo, passwordResetRepo, &fakeJWT{}, sender, 15*time.Minute, 5, 6)
 
 	err := svc.ResendVerificationCode(context.Background(), "nouser@example.com")
 	require.NoError(t, err)
@@ -141,9 +159,10 @@ func TestResendVerificationCode_AlreadyVerified(t *testing.T) {
 		u.Email: u,
 	}}
 	verifRepo := &fakeEmailVerifRepo{}
+	passwordResetRepo := &fakePasswordResetRepo{}
 	sender := &fakeEmailSender{}
 
-	svc := authuc.NewService(userRepo, verifRepo, &fakeJWT{}, sender, 15*time.Minute, 5, 6)
+	svc := authuc.NewService(userRepo, verifRepo, passwordResetRepo, &fakeJWT{}, sender, 15*time.Minute, 5, 6)
 
 	err := svc.ResendVerificationCode(context.Background(), u.Email)
 	require.Error(t, err)
@@ -162,9 +181,10 @@ func TestResendVerificationCode_Unverified_CreatesNewCodeAndDeletesOld(t *testin
 		u.Email: u,
 	}}
 	verifRepo := &fakeEmailVerifRepo{}
+	passwordResetRepo := &fakePasswordResetRepo{}
 	sender := &fakeEmailSender{}
 
-	svc := authuc.NewService(userRepo, verifRepo, &fakeJWT{}, sender, 15*time.Minute, 5, 6)
+	svc := authuc.NewService(userRepo, verifRepo, passwordResetRepo, &fakeJWT{}, sender, 15*time.Minute, 5, 6)
 
 	err := svc.ResendVerificationCode(context.Background(), u.Email)
 	require.NoError(t, err)

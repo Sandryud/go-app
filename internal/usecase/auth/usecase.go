@@ -161,6 +161,17 @@ func (s *service) VerifyEmail(ctx context.Context, email, code string) (*domain.
 
 	user, err := s.users.GetByEmail(ctx, email)
 	if err != nil {
+		// Если пользователь не найден, возвращаем ErrVerificationCodeNotFound
+		// для единообразия с ошибкой отсутствия кода верификации.
+		// Это отличается от ResendVerificationCode, где ErrNotFound игнорируется
+		// для безопасности (чтобы не раскрывать существование аккаунта).
+		// Здесь же пользователь явно пытается верифицировать код, поэтому
+		// возвращаем ошибку для ясности. Это не раскрывает дополнительной информации,
+		// так как отсутствие пользователя или кода верификации приводит к одинаковому
+		// результату - невозможности верификации.
+		if err == repo.ErrNotFound {
+			return nil, "", "", ErrVerificationCodeNotFound
+		}
 		return nil, "", "", err
 	}
 
@@ -184,12 +195,16 @@ func (s *service) VerifyEmail(ctx context.Context, email, code string) (*domain.
 
 	switch result {
 	case verification.VerificationExpired:
-		if err := s.emailVerifs.DeleteByUserID(ctx, user.ID); err != nil {
+		// Игнорируем ErrNotFound, так как запись могла быть уже удалена
+		// (например, другим запросом или по истечении TTL)
+		if err := s.emailVerifs.DeleteByUserID(ctx, user.ID); err != nil && err != repo.ErrNotFound {
 			return nil, "", "", fmt.Errorf("failed to delete expired verification: %w", err)
 		}
 		return nil, "", "", ErrVerificationCodeNotFound
 	case verification.VerificationAttemptsExceeded:
-		if err := s.emailVerifs.DeleteByUserID(ctx, user.ID); err != nil {
+		// Игнорируем ErrNotFound, так как запись могла быть уже удалена
+		// (например, другим запросом или по истечении TTL)
+		if err := s.emailVerifs.DeleteByUserID(ctx, user.ID); err != nil && err != repo.ErrNotFound {
 			return nil, "", "", fmt.Errorf("failed to delete verification after exceeded attempts: %w", err)
 		}
 		return nil, "", "", ErrVerificationAttemptsExceeded
@@ -523,10 +538,7 @@ func (s *service) ResetPassword(ctx context.Context, email, code, newPassword st
 	}
 
 	// Обновляем пароль пользователя
-	user.PasswordHash = hashedPassword
-	user.UpdatedAt = time.Now().UTC()
-
-	if err := s.users.Update(ctx, user); err != nil {
+	if err := s.users.UpdatePassword(ctx, user.ID, hashedPassword); err != nil {
 		return fmt.Errorf("failed to update password: %w", err)
 	}
 

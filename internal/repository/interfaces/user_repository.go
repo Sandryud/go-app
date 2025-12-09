@@ -43,6 +43,11 @@ type UserRepository interface {
 	// Не обновляет защищенные поля: id, created_at, password_hash.
 	Update(ctx context.Context, user *domain.User) error
 
+	// UpdatePassword обновляет пароль пользователя по его ID.
+	// Используется для сброса пароля.
+	// Возвращает ErrNotFound, если пользователь не найден или удалён.
+	UpdatePassword(ctx context.Context, userID uuid.UUID, passwordHash string) error
+
 	// SoftDelete помечает пользователя как удалённого (soft delete).
 	SoftDelete(ctx context.Context, id uuid.UUID) error
 

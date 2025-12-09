@@ -38,12 +38,24 @@ func VerifyCode(
 	if err := password.Compare(verification.CodeHash, code); err != nil {
 		// Увеличиваем количество попыток
 		if err := emailVerifs.IncrementAttempts(ctx, verification.ID); err != nil {
+			// Обработка race condition: если код был удален между получением и попыткой
+			// увеличить счетчик (например, другим процессом, истек или был использован),
+			// считаем код истекшим для консистентности.
+			if err == repo.ErrNotFound {
+				return handleVerificationNotFound()
+			}
 			return 0, nil, fmt.Errorf("failed to increment attempts: %w", err)
 		}
 
 		// Получаем обновленное значение попыток из БД для исправления race condition
 		updatedVerification, err := getVerificationByID(ctx, emailVerifs, verification.ID)
 		if err != nil {
+			// Обработка race condition: если код был удален между инкрементом попыток
+			// и получением обновленной записи (например, другим процессом, истек или был использован),
+			// считаем код истекшим для консистентности.
+			if err == repo.ErrNotFound {
+				return handleVerificationNotFound()
+			}
 			return 0, nil, fmt.Errorf("failed to get updated verification: %w", err)
 		}
 
@@ -57,6 +69,12 @@ func VerifyCode(
 
 	// Код верный
 	return VerificationSuccess, verification, nil
+}
+
+// handleVerificationNotFound обрабатывает случай, когда верификация была удалена
+// между получением и операцией (race condition). Считаем код истекшим.
+func handleVerificationNotFound() (VerificationResult, *domain.EmailVerification, error) {
+	return VerificationExpired, nil, nil
 }
 
 // getVerificationByID получает запись верификации по ID.

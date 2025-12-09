@@ -256,6 +256,29 @@ func (r *UserRepository) Update(ctx context.Context, user *domain.User) error {
 	return nil
 }
 
+// UpdatePassword обновляет пароль пользователя по его ID.
+// Возвращает ErrNotFound, если пользователь не найден или удалён (deleted_at IS NULL).
+// Поле updated_at обновляется автоматически триггером update_users_updated_at.
+func (r *UserRepository) UpdatePassword(ctx context.Context, userID uuid.UUID, passwordHash string) error {
+	result := r.db.WithContext(ctx).
+		Model(&pgUser{}).
+		Where("id = ? AND deleted_at IS NULL", userID.String()).
+		Updates(map[string]interface{}{
+			"password_hash": passwordHash,
+			// updated_at обновляется автоматически триггером update_users_updated_at
+		})
+
+	if result.Error != nil {
+		return result.Error
+	}
+
+	if result.RowsAffected == 0 {
+		return repo.ErrNotFound
+	}
+
+	return nil
+}
+
 // SoftDelete помечает пользователя как удалённого.
 // Синхронизировано с доменным методом MarkDeleted (также обновляет updated_at).
 func (r *UserRepository) SoftDelete(ctx context.Context, id uuid.UUID) error {
