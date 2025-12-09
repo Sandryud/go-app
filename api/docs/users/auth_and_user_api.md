@@ -274,6 +274,80 @@ curl -i -X POST http://localhost:8080/api/v1/auth/restore \
 
 ---
 
+### POST `/api/v1/auth/forgot-password`
+
+- **Описание**: запрос кода сброса пароля. Отправляет код сброса пароля на указанный email, если аккаунт существует, не удалён и email подтверждён. Для безопасности не раскрывает, существует ли пользователь с таким email.
+- **Тело**:
+
+```json
+{
+  "email": "user1@example.com"
+}
+```
+
+- **Успех**: `200 OK`
+
+```json
+{
+  "message": "If an account with this email exists and is verified, a password reset code has been sent"
+}
+```
+
+- **Ошибки**:
+  - `400 invalid_request` — невалидное тело запроса.
+  - `403 email_not_verified` — email не подтверждён. Сообщение: "Email is not verified".
+  - `500 internal_error` — внутренняя ошибка сервера.
+
+Пример:
+
+```bash
+curl -i -X POST http://localhost:8080/api/v1/auth/forgot-password \
+  -H "Content-Type: application/json" \
+  -d '{"email":"user1@example.com"}'
+```
+
+---
+
+### POST `/api/v1/auth/reset-password`
+
+- **Описание**: сброс пароля по коду, отправленному на email. Проверяет код, обновляет пароль пользователя и помечает код как использованный.
+- **Тело**:
+
+```json
+{
+  "email": "user1@example.com",
+  "code": "123456",
+  "new_password": "NewPassword123!"
+}
+```
+
+- **Успех**: `200 OK`
+
+```json
+{
+  "message": "Password has been successfully reset"
+}
+```
+
+- **Ошибки**:
+  - `400 invalid_request` — невалидное тело запроса.
+  - `400 password_reset_code_not_found` — код не найден или истёк срок действия. Запросите новый код через `/api/v1/auth/forgot-password`. Сообщение: "Password reset code not found or expired. Please request a new code."
+  - `400 password_reset_code_invalid` — неверный код сброса пароля. Сообщение: "Password reset code is invalid".
+  - `400 password_reset_attempts_exceeded` — превышен лимит попыток ввода кода. Запросите новый код. Сообщение: "Password reset attempts limit exceeded. Please request a new code."
+  - `400 password_reset_code_used` — код уже использован. Запросите новый код. Сообщение: "Password reset code has already been used. Please request a new code."
+  - `403 email_not_verified` — email не подтверждён. Сообщение: "Email is not verified".
+  - `500 internal_error` — внутренняя ошибка сервера.
+
+Пример:
+
+```bash
+curl -i -X POST http://localhost:8080/api/v1/auth/reset-password \
+  -H "Content-Type: application/json" \
+  -d '{"email":"user1@example.com","code":"123456","new_password":"NewPassword123!"}'
+```
+
+---
+
 ## User (требуется JWT access‑токен)
 
 ### GET `/api/v1/users/me`

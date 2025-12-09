@@ -68,3 +68,25 @@ type RestoreAccountResponse struct {
 	Username string             `json:"username"`
 	Tokens   response.TokenPair `json:"tokens"`
 }
+
+// ForgotPasswordRequest описывает тело запроса для запроса кода сброса пароля.
+type ForgotPasswordRequest struct {
+	Email string `json:"email" binding:"required,email"`
+}
+
+// ForgotPasswordResponse описывает ответ на запрос кода сброса пароля.
+type ForgotPasswordResponse struct {
+	Message string `json:"message"`
+}
+
+// ResetPasswordRequest описывает тело запроса для сброса пароля.
+type ResetPasswordRequest struct {
+	Email       string `json:"email" binding:"required,email"`
+	Code        string `json:"code" binding:"required,len=6"`
+	NewPassword string `json:"new_password" binding:"required,min=8"`
+}
+
+// ResetPasswordResponse описывает ответ при успешном сбросе пароля.
+type ResetPasswordResponse struct {
+	Message string `json:"message"`
+}

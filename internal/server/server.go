@@ -59,6 +59,14 @@ func (s *loggerEmailSender) SendEmailVerificationCode(ctx context.Context, email
 	return nil
 }
 
+func (s *loggerEmailSender) SendPasswordResetCode(ctx context.Context, email, code string) error {
+	s.logger.Info("Password reset code sent", map[string]any{
+		"email": email,
+		"code":  code,
+	})
+	return nil
+}
+
 // NewServer создает новый экземпляр сервера
 func NewServer(cfg *config.Config, db *database.DB) *Server {
 	// Устанавливаем режим Gin в зависимости от окружения
@@ -82,6 +90,7 @@ func NewServer(cfg *config.Config, db *database.DB) *Server {
 	gormDB := db.DB
 	userRepo := pgrepo.NewUserRepository(gormDB)
 	emailVerifRepo := pgrepo.NewEmailVerificationRepository(gormDB)
+	passwordResetRepo := pgrepo.NewPasswordResetRepository(gormDB)
 	s.jwtService = jwt.NewService(&cfg.JWT)
 
 	var emailSender mailerpkg.EmailSender
@@ -95,6 +104,7 @@ func NewServer(cfg *config.Config, db *database.DB) *Server {
 	authService := authuc.NewService(
 		userRepo,
 		emailVerifRepo,
+		passwordResetRepo,
 		s.jwtService,
 		emailSender,
 		cfg.Email.VerificationTTL,
@@ -179,6 +189,10 @@ func (s *Server) setupAuthRoutes() {
 		authGroup.POST("/refresh", s.authHandler.Refresh)
 		// POST /api/v1/auth/restore — восстановить удалённый аккаунт по email и паролю.
 		authGroup.POST("/restore", s.authHandler.RestoreAccount)
+		// POST /api/v1/auth/forgot-password — запрос кода сброса пароля.
+		authGroup.POST("/forgot-password", s.authHandler.ForgotPassword)
+		// POST /api/v1/auth/reset-password — сброс пароля по коду.
+		authGroup.POST("/reset-password", s.authHandler.ResetPassword)
 	}
 }
 

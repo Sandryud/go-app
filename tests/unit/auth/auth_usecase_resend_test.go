@@ -102,6 +102,12 @@ func (s *fakeEmailSender) SendEmailVerificationCode(_ context.Context, email, co
 	return nil
 }
 
+func (s *fakeEmailSender) SendPasswordResetCode(_ context.Context, email, code string) error {
+	s.sentTo = email
+	s.code = code
+	return nil
+}
+
 // fakeJWT реализует jwtsvc.Service, но для этих тестов не используется.
 type fakeJWT struct{}
 

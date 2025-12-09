@@ -384,3 +384,123 @@ func (h *Handler) RestoreAccount(c *gin.Context) {
 
 	c.JSON(http.StatusOK, resp)
 }
+
+// ForgotPassword godoc
+// @Summary      Запрос кода сброса пароля
+// @Description  Отправляет код сброса пароля на указанный email, если аккаунт существует и email подтверждён.
+// @Tags         auth
+// @Accept       json
+// @Produce      json
+// @Param        payload  body      ForgotPasswordRequest  true  "Email для запроса кода сброса пароля"
+// @Success      200      {object}  ForgotPasswordResponse
+// @Failure      400      {object}  response.ErrorBody
+// @Failure      403      {object}  response.ErrorBody
+// @Failure      500      {object}  response.ErrorBody
+// @Router       /api/v1/auth/forgot-password [post]
+func (h *Handler) ForgotPassword(c *gin.Context) {
+	var req ForgotPasswordRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, http.StatusBadRequest, "invalid_request", "Invalid request body", err.Error())
+		return
+	}
+
+	err := h.auth.RequestPasswordReset(c.Request.Context(), req.Email)
+	if err != nil {
+		switch {
+		case errors.Is(err, authuc.ErrEmailNotVerified):
+			h.logger.Info("email_not_verified_in_forgot_password", map[string]any{
+				"email":  req.Email,
+				"path":   c.Request.URL.Path,
+				"method": c.Request.Method,
+			})
+			response.Error(c, http.StatusForbidden, "email_not_verified", "Email is not verified", nil)
+		default:
+			h.logger.Error("internal_error_in_forgot_password", map[string]any{
+				"email":  req.Email,
+				"path":   c.Request.URL.Path,
+				"method": c.Request.Method,
+				"error":  err.Error(),
+			})
+			response.Error(c, http.StatusInternalServerError, "internal_error", "Internal server error", nil)
+		}
+		return
+	}
+
+	c.JSON(http.StatusOK, ForgotPasswordResponse{
+		Message: "If an account with this email exists and is verified, a password reset code has been sent",
+	})
+}
+
+// ResetPassword godoc
+// @Summary      Сброс пароля
+// @Description  Сбрасывает пароль пользователя по коду, отправленному на email.
+// @Tags         auth
+// @Accept       json
+// @Produce      json
+// @Param        payload  body      ResetPasswordRequest  true  "Данные для сброса пароля"
+// @Success      200      {object}  ResetPasswordResponse
+// @Failure      400      {object}  response.ErrorBody
+// @Failure      403      {object}  response.ErrorBody
+// @Failure      500      {object}  response.ErrorBody
+// @Router       /api/v1/auth/reset-password [post]
+func (h *Handler) ResetPassword(c *gin.Context) {
+	var req ResetPasswordRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, http.StatusBadRequest, "invalid_request", "Invalid request body", err.Error())
+		return
+	}
+
+	err := h.auth.ResetPassword(c.Request.Context(), req.Email, req.Code, req.NewPassword)
+	if err != nil {
+		switch {
+		case errors.Is(err, authuc.ErrPasswordResetCodeNotFound):
+			h.logger.Info("password_reset_code_not_found", map[string]any{
+				"email":  req.Email,
+				"path":   c.Request.URL.Path,
+				"method": c.Request.Method,
+			})
+			response.Error(c, http.StatusBadRequest, "password_reset_code_not_found", "Password reset code not found or expired. Please request a new code.", nil)
+		case errors.Is(err, authuc.ErrPasswordResetCodeInvalid):
+			h.logger.Info("password_reset_code_invalid", map[string]any{
+				"email":  req.Email,
+				"path":   c.Request.URL.Path,
+				"method": c.Request.Method,
+			})
+			response.Error(c, http.StatusBadRequest, "password_reset_code_invalid", "Password reset code is invalid", nil)
+		case errors.Is(err, authuc.ErrPasswordResetAttemptsExceeded):
+			h.logger.Info("password_reset_attempts_exceeded", map[string]any{
+				"email":  req.Email,
+				"path":   c.Request.URL.Path,
+				"method": c.Request.Method,
+			})
+			response.Error(c, http.StatusBadRequest, "password_reset_attempts_exceeded", "Password reset attempts limit exceeded. Please request a new code.", nil)
+		case errors.Is(err, authuc.ErrPasswordResetCodeUsed):
+			h.logger.Info("password_reset_code_used", map[string]any{
+				"email":  req.Email,
+				"path":   c.Request.URL.Path,
+				"method": c.Request.Method,
+			})
+			response.Error(c, http.StatusBadRequest, "password_reset_code_used", "Password reset code has already been used. Please request a new code.", nil)
+		case errors.Is(err, authuc.ErrEmailNotVerified):
+			h.logger.Info("email_not_verified_in_reset_password", map[string]any{
+				"email":  req.Email,
+				"path":   c.Request.URL.Path,
+				"method": c.Request.Method,
+			})
+			response.Error(c, http.StatusForbidden, "email_not_verified", "Email is not verified", nil)
+		default:
+			h.logger.Error("internal_error_in_reset_password", map[string]any{
+				"email":  req.Email,
+				"path":   c.Request.URL.Path,
+				"method": c.Request.Method,
+				"error":  err.Error(),
+			})
+			response.Error(c, http.StatusInternalServerError, "internal_error", "Internal server error", nil)
+		}
+		return
+	}
+
+	c.JSON(http.StatusOK, ResetPasswordResponse{
+		Message: "Password has been successfully reset",
+	})
+}

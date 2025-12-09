@@ -41,25 +41,38 @@ type Service interface {
 	// Возвращает пользователя и пару access/refresh токенов.
 	// Требует, чтобы email был подтверждён.
 	RestoreAccount(ctx context.Context, email, password string) (*domain.User, string, string, error)
+
+	// RequestPasswordReset запрашивает код сброса пароля для указанного email.
+	// Отправляет код на email, если пользователь существует, не удалён и email подтверждён.
+	RequestPasswordReset(ctx context.Context, email string) error
+
+	// ResetPassword сбрасывает пароль пользователя по коду.
+	// Проверяет код, обновляет пароль и помечает код как использованный.
+	ResetPassword(ctx context.Context, email, code, newPassword string) error
 }
 
 // Ошибки бизнес-логики usecase-слоя.
 var (
-	ErrEmailAlreadyVerified         = fmt.Errorf("email already verified")
-	ErrVerificationCodeNotFound     = fmt.Errorf("verification code not found")
-	ErrVerificationCodeInvalid      = fmt.Errorf("verification code invalid")
-	ErrVerificationAttemptsExceeded = fmt.Errorf("verification attempts exceeded")
-	ErrEmailNotVerified             = fmt.Errorf("email not verified")
-	ErrInvalidCredentials           = fmt.Errorf("invalid email or password")
-	ErrInvalidRefreshToken          = fmt.Errorf("invalid refresh token")
-	ErrEmailUnverifiedExists        = fmt.Errorf("unverified account with this email already exists")
-	ErrAccountDeleted               = fmt.Errorf("account is deleted")
-	ErrAccountNotDeleted            = fmt.Errorf("account is not deleted")
+	ErrEmailAlreadyVerified          = fmt.Errorf("email already verified")
+	ErrVerificationCodeNotFound      = fmt.Errorf("verification code not found")
+	ErrVerificationCodeInvalid       = fmt.Errorf("verification code invalid")
+	ErrVerificationAttemptsExceeded  = fmt.Errorf("verification attempts exceeded")
+	ErrEmailNotVerified              = fmt.Errorf("email not verified")
+	ErrInvalidCredentials            = fmt.Errorf("invalid email or password")
+	ErrInvalidRefreshToken           = fmt.Errorf("invalid refresh token")
+	ErrEmailUnverifiedExists         = fmt.Errorf("unverified account with this email already exists")
+	ErrAccountDeleted                = fmt.Errorf("account is deleted")
+	ErrAccountNotDeleted             = fmt.Errorf("account is not deleted")
+	ErrPasswordResetCodeNotFound     = fmt.Errorf("password reset code not found")
+	ErrPasswordResetCodeInvalid      = fmt.Errorf("password reset code invalid")
+	ErrPasswordResetAttemptsExceeded = fmt.Errorf("password reset attempts exceeded")
+	ErrPasswordResetCodeUsed         = fmt.Errorf("password reset code already used")
 )
 
 type service struct {
 	users           repo.UserRepository
 	emailVerifs     repo.EmailVerificationRepository
+	passwordResets  repo.PasswordResetRepository
 	jwt             jwtsvc.Service
 	emailSender     mailer.EmailSender
 	verificationTTL time.Duration
@@ -73,6 +86,7 @@ type service struct {
 func NewService(
 	users repo.UserRepository,
 	emailVerifs repo.EmailVerificationRepository,
+	passwordResets repo.PasswordResetRepository,
 	jwt jwtsvc.Service,
 	emailSender mailer.EmailSender,
 	verificationTTL time.Duration,
@@ -82,6 +96,7 @@ func NewService(
 	return &service{
 		users:           users,
 		emailVerifs:     emailVerifs,
+		passwordResets:  passwordResets,
 		jwt:             jwt,
 		emailSender:     emailSender,
 		verificationTTL: verificationTTL,
@@ -420,4 +435,176 @@ func (s *service) RestoreAccount(ctx context.Context, email, rawPassword string)
 	}
 
 	return restoredUser, access, refresh, nil
+}
+
+// RequestPasswordReset запрашивает код сброса пароля для указанного email.
+func (s *service) RequestPasswordReset(ctx context.Context, email string) error {
+	if email == "" {
+		return fmt.Errorf("email is required")
+	}
+
+	// Получаем пользователя (только активных, не удаленных)
+	user, err := s.users.GetByEmail(ctx, email)
+	if err != nil {
+		if err == repo.ErrNotFound {
+			// Не раскрываем, что пользователя нет — считаем успешным no-op для безопасности.
+			return nil
+		}
+		return err
+	}
+
+	// Проверяем, что email подтверждён
+	if !user.IsEmailVerified {
+		return ErrEmailNotVerified
+	}
+
+	// Удаляем все старые коды сброса пароля для пользователя (если есть).
+	if err := s.passwordResets.DeleteByUserID(ctx, user.ID); err != nil && err != repo.ErrNotFound {
+		return err
+	}
+
+	// Создаём и отправляем код сброса пароля
+	return s.createAndSendPasswordResetCode(ctx, user)
+}
+
+// ResetPassword сбрасывает пароль пользователя по коду.
+func (s *service) ResetPassword(ctx context.Context, email, code, newPassword string) error {
+	if email == "" || code == "" || newPassword == "" {
+		return fmt.Errorf("email, code and new password are required")
+	}
+
+	// Получаем пользователя
+	user, err := s.users.GetByEmail(ctx, email)
+	if err != nil {
+		if err == repo.ErrNotFound {
+			return ErrPasswordResetCodeNotFound
+		}
+		return err
+	}
+
+	// Получаем активный код сброса пароля
+	pr, err := s.passwordResets.GetActiveByUserID(ctx, user.ID)
+	if err != nil {
+		if err == repo.ErrNotFound {
+			return ErrPasswordResetCodeNotFound
+		}
+		return err
+	}
+
+	// Проверяем код
+	result, _, err := s.verifyPasswordResetCode(ctx, pr, code)
+	if err != nil {
+		return fmt.Errorf("failed to verify password reset code: %w", err)
+	}
+
+	switch result {
+	case verification.VerificationExpired:
+		if err := s.passwordResets.DeleteByUserID(ctx, user.ID); err != nil && err != repo.ErrNotFound {
+			return fmt.Errorf("failed to delete expired password reset code: %w", err)
+		}
+		return ErrPasswordResetCodeNotFound
+	case verification.VerificationAttemptsExceeded:
+		if err := s.passwordResets.DeleteByUserID(ctx, user.ID); err != nil && err != repo.ErrNotFound {
+			return fmt.Errorf("failed to delete password reset code after exceeded attempts: %w", err)
+		}
+		return ErrPasswordResetAttemptsExceeded
+	case verification.VerificationCodeInvalid:
+		return ErrPasswordResetCodeInvalid
+	case verification.VerificationSuccess:
+		// Продолжаем обработку успешной проверки
+	default:
+		return fmt.Errorf("unknown verification result: %d", result)
+	}
+
+	// Хешируем новый пароль
+	hashedPassword, err := password.Hash(newPassword)
+	if err != nil {
+		return fmt.Errorf("failed to hash password: %w", err)
+	}
+
+	// Обновляем пароль пользователя
+	user.PasswordHash = hashedPassword
+	user.UpdatedAt = time.Now().UTC()
+
+	if err := s.users.Update(ctx, user); err != nil {
+		return fmt.Errorf("failed to update password: %w", err)
+	}
+
+	// Удаляем все коды сброса пароля для пользователя
+	if err := s.passwordResets.DeleteByUserID(ctx, user.ID); err != nil && err != repo.ErrNotFound {
+		return fmt.Errorf("failed to delete password reset codes: %w", err)
+	}
+
+	return nil
+}
+
+// createAndSendPasswordResetCode создаёт запись с кодом сброса пароля
+// и отправляет его пользователю.
+func (s *service) createAndSendPasswordResetCode(ctx context.Context, user *domain.User) error {
+	code, err := verification.GenerateNumericCode(s.codeLength)
+	if err != nil {
+		return fmt.Errorf("failed to generate password reset code: %w", err)
+	}
+
+	codeHash, err := password.Hash(code)
+	if err != nil {
+		return fmt.Errorf("failed to hash password reset code: %w", err)
+	}
+
+	now := time.Now().UTC()
+	passwordReset := &domain.PasswordReset{
+		UserID:      user.ID,
+		CodeHash:    codeHash,
+		ExpiresAt:   now.Add(s.verificationTTL),
+		Attempts:    0,
+		MaxAttempts: s.maxAttempts,
+		CreatedAt:   now,
+	}
+
+	if err := s.passwordResets.Create(ctx, passwordReset); err != nil {
+		return err
+	}
+
+	if err := s.emailSender.SendPasswordResetCode(ctx, user.Email, code); err != nil {
+		return fmt.Errorf("failed to send password reset email: %w", err)
+	}
+
+	return nil
+}
+
+// verifyPasswordResetCode проверяет код сброса пароля и обрабатывает попытки.
+// Возвращает результат проверки и обновленную запись сброса пароля.
+func (s *service) verifyPasswordResetCode(
+	ctx context.Context,
+	pr *domain.PasswordReset,
+	code string,
+) (verification.VerificationResult, *domain.PasswordReset, error) {
+	// Проверяем TTL
+	if time.Now().UTC().After(pr.ExpiresAt) {
+		return verification.VerificationExpired, nil, nil
+	}
+
+	// Сравниваем код по хэшу
+	if err := password.Compare(pr.CodeHash, code); err != nil {
+		// Увеличиваем количество попыток
+		if err := s.passwordResets.IncrementAttempts(ctx, pr.ID); err != nil {
+			return 0, nil, fmt.Errorf("failed to increment attempts: %w", err)
+		}
+
+		// Получаем обновленное значение попыток из БД для исправления race condition
+		updatedPR, err := s.passwordResets.GetByID(ctx, pr.ID)
+		if err != nil {
+			return 0, nil, fmt.Errorf("failed to get updated password reset: %w", err)
+		}
+
+		// Проверяем, не превышен ли лимит попыток
+		if updatedPR.Attempts >= updatedPR.MaxAttempts {
+			return verification.VerificationAttemptsExceeded, updatedPR, nil
+		}
+
+		return verification.VerificationCodeInvalid, updatedPR, nil
+	}
+
+	// Код верный
+	return verification.VerificationSuccess, pr, nil
 }
