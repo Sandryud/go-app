@@ -122,5 +122,3 @@ func TestAuth_Register_WithDeletedAccount(t *testing.T) {
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &errorResp))
 	require.Equal(t, "account_deleted", errorResp["error"].(map[string]interface{})["code"])
 }
-
-

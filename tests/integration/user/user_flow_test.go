@@ -124,15 +124,15 @@ func TestUser_Profile_Flow(t *testing.T) {
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &errorResp))
 	require.Equal(t, "account_deleted", errorResp["error"].(map[string]interface{})["code"])
 
-	// 7. Восстановление аккаунта через POST /api/v1/users/restore -> возвращает профиль и токены
+	// 7. Восстановление аккаунта через POST /api/v1/auth/restore -> возвращает профиль и токены
 	restoreBody := `{"email":"uflow@example.com","password":"Password123!"}`
 	w = httptest.NewRecorder()
-	req = httptest.NewRequest(http.MethodPost, "/api/v1/users/restore", strings.NewReader(restoreBody))
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/auth/restore", strings.NewReader(restoreBody))
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 
-	var restoredResp userhandler.RestoreAccountResponse
+	var restoredResp authhandler.RestoreAccountResponse
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &restoredResp))
 	require.Equal(t, userID, restoredResp.UserID)
 	require.Equal(t, "uflow@example.com", restoredResp.Email)
@@ -291,15 +291,15 @@ func TestUser_Restore_Account(t *testing.T) {
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &errorResp))
 	require.Equal(t, "account_deleted", errorResp["error"].(map[string]interface{})["code"])
 
-	// 7. Восстановление аккаунта через POST /api/v1/users/restore -> 200 с токенами
+	// 7. Восстановление аккаунта через POST /api/v1/auth/restore -> 200 с токенами
 	restoreBody := `{"email":"restore@example.com","password":"Password123!"}`
 	w = httptest.NewRecorder()
-	req = httptest.NewRequest(http.MethodPost, "/api/v1/users/restore", strings.NewReader(restoreBody))
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/auth/restore", strings.NewReader(restoreBody))
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 
-	var restoredResp userhandler.RestoreAccountResponse
+	var restoredResp authhandler.RestoreAccountResponse
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &restoredResp))
 	require.Equal(t, userID, restoredResp.UserID)
 	require.Equal(t, "restore@example.com", restoredResp.Email)
@@ -333,7 +333,7 @@ func TestUser_Restore_Account_InvalidCredentials(t *testing.T) {
 	// 2. Попытка восстановления с неверным паролем -> 401 invalid_credentials
 	restoreBody := `{"email":"restoreinvalid@example.com","password":"WrongPassword123!"}`
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/users/restore", strings.NewReader(restoreBody))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/restore", strings.NewReader(restoreBody))
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusUnauthorized, w.Code, w.Body.String())
@@ -353,7 +353,7 @@ func TestUser_Restore_Account_NotDeleted(t *testing.T) {
 	// 2. Попытка восстановления не удалённого аккаунта -> 400 account_not_deleted
 	restoreBody := `{"email":"restorenotdeleted@example.com","password":"Password123!"}`
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/users/restore", strings.NewReader(restoreBody))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/restore", strings.NewReader(restoreBody))
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
@@ -384,7 +384,7 @@ func TestUser_Restore_Account_EmailNotVerified(t *testing.T) {
 	// 3. Попытка восстановления аккаунта с неподтверждённым email -> 403 email_not_verified
 	restoreBody := `{"email":"restoreunverified@example.com","password":"Password123!"}`
 	w = httptest.NewRecorder()
-	req = httptest.NewRequest(http.MethodPost, "/api/v1/users/restore", strings.NewReader(restoreBody))
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/auth/restore", strings.NewReader(restoreBody))
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusForbidden, w.Code, w.Body.String())

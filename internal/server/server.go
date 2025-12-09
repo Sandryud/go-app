@@ -177,6 +177,8 @@ func (s *Server) setupAuthRoutes() {
 		authGroup.POST("/resend-verification", s.authHandler.ResendVerification)
 		// POST /api/v1/auth/refresh — обновление пары access/refresh токенов по refresh-токену.
 		authGroup.POST("/refresh", s.authHandler.Refresh)
+		// POST /api/v1/auth/restore — восстановить удалённый аккаунт по email и паролю.
+		authGroup.POST("/restore", s.authHandler.RestoreAccount)
 	}
 }
 
@@ -200,10 +202,6 @@ func (s *Server) setupUserRoutes() {
 		// GET /api/v1/users/:id — получить публичный профиль пользователя по ID.
 		userGroup.GET("/:id", s.userHandler.GetByID)
 	}
-
-	// Публичный эндпоинт для восстановления аккаунта (без middleware.Auth)
-	// POST /api/v1/users/restore — восстановить удалённый аккаунт по email и паролю.
-	v1.POST("/users/restore", s.userHandler.RestoreAccount)
 
 	// Админские роуты
 	adminGroup := v1.Group("/admin")

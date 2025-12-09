@@ -53,7 +53,7 @@
   - `400 invalid_request` — невалидное тело.
   - `409 email_already_exists` — email занят (аккаунт уже подтверждён).
   - `409 email_unverified` — аккаунт с таким email существует, но не подтверждён. Запросите новый код подтверждения через `/api/v1/auth/resend-verification`.
-  - `409 account_deleted` — аккаунт с таким email был удалён. Используйте эндпоинт восстановления аккаунта `/api/v1/users/restore`. Сообщение: "Account with this email was deleted. Use the account restoration endpoint."
+  - `409 account_deleted` — аккаунт с таким email был удалён. Используйте эндпоинт восстановления аккаунта `/api/v1/auth/restore`. Сообщение: "Account with this email was deleted. Use the account restoration endpoint."
   - `409 username_already_exists` — username занят.
 
 Пример:
@@ -96,7 +96,7 @@ curl -i -X POST http://localhost:8080/api/v1/auth/register \
   - `400 invalid_request`
   - `401 invalid_credentials` — неверный email или пароль.
   - `403 email_not_verified` — email не подтверждён. Используйте `/api/v1/auth/verify-email` для подтверждения.
-  - `403 account_deleted` — аккаунт был удалён. Хотите восстановить его? Используйте `/api/v1/users/restore` для восстановления. Сообщение: "Your account was deleted. Would you like to restore it?"
+  - `403 account_deleted` — аккаунт был удалён. Хотите восстановить его? Используйте `/api/v1/auth/restore` для восстановления. Сообщение: "Your account was deleted. Would you like to restore it?"
 
 Пример:
 
@@ -231,9 +231,7 @@ curl -i -X POST http://localhost:8080/api/v1/auth/refresh \
 
 ---
 
-## User
-
-### POST `/api/v1/users/restore`
+### POST `/api/v1/auth/restore`
 
 - **Описание**: восстановление удалённого аккаунта по email и паролю. Восстанавливает мягко удалённый аккаунт и возвращает пару access/refresh токенов.
 - **Тело**:
@@ -269,7 +267,7 @@ curl -i -X POST http://localhost:8080/api/v1/auth/refresh \
 Пример:
 
 ```bash
-curl -i -X POST http://localhost:8080/api/v1/users/restore \
+curl -i -X POST http://localhost:8080/api/v1/auth/restore \
   -H "Content-Type: application/json" \
   -d '{"email":"user1@example.com","password":"Password123!"}'
 ```

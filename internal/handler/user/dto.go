@@ -2,8 +2,6 @@ package user
 
 import (
 	"time"
-
-	"workout-app/internal/handler/response"
 )
 
 // ProfileResponse описывает профиль текущего пользователя.
@@ -70,18 +68,4 @@ type VerifyEmailChangeRequest struct {
 // DeleteAccountRequest описывает тело запроса для удаления аккаунта.
 type DeleteAccountRequest struct {
 	Password string `json:"password" binding:"required"`
-}
-
-// RestoreAccountRequest описывает тело запроса для восстановления аккаунта.
-type RestoreAccountRequest struct {
-	Email    string `json:"email" binding:"required,email"`
-	Password string `json:"password" binding:"required"`
-}
-
-// RestoreAccountResponse описывает ответ при успешном восстановлении аккаунта.
-type RestoreAccountResponse struct {
-	UserID   string             `json:"user_id"`
-	Email    string             `json:"email"`
-	Username string             `json:"username"`
-	Tokens   response.TokenPair `json:"tokens"`
 }

@@ -54,3 +54,17 @@ type LoginResponse struct {
 type RefreshRequest struct {
 	RefreshToken string `json:"refresh_token" binding:"required"`
 }
+
+// RestoreAccountRequest описывает тело запроса для восстановления аккаунта.
+type RestoreAccountRequest struct {
+	Email    string `json:"email" binding:"required,email"`
+	Password string `json:"password" binding:"required"`
+}
+
+// RestoreAccountResponse описывает ответ при успешном восстановлении аккаунта.
+type RestoreAccountResponse struct {
+	UserID   string             `json:"user_id"`
+	Email    string             `json:"email"`
+	Username string             `json:"username"`
+	Tokens   response.TokenPair `json:"tokens"`
+}
