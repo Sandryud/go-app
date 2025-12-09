@@ -69,4 +69,56 @@ func TestAuth_Register_Login_Refresh(t *testing.T) {
 	require.NotEmpty(t, refreshResp.Tokens.RefreshToken)
 }
 
+// TestAuth_Register_WithDeletedAccount проверяет, что попытка регистрации
+// с email удалённого аккаунта возвращает ошибку account_deleted.
+func TestAuth_Register_WithDeletedAccount(t *testing.T) {
+	router := testcfg.NewTestRouter(t)
 
+	// 1. Регистрация пользователя
+	registerBody := `{"email":"deleted@example.com","password":"Password123!","username":"deleteduser"}`
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/register", strings.NewReader(registerBody))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
+
+	var regResp authhandler.RegisterResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &regResp))
+	require.Equal(t, "deleted@example.com", regResp.Email)
+
+	// 2. Подтверждение email
+	testcfg.VerifyUserEmailForTests(t, regResp.Email)
+
+	// 3. Логин для получения токена
+	loginBody := `{"email":"deleted@example.com","password":"Password123!"}`
+	w = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", strings.NewReader(loginBody))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	var loginResp authhandler.LoginResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &loginResp))
+	access := loginResp.Tokens.AccessToken
+
+	// 4. Удаление аккаунта через API
+	deleteBody := `{"password":"Password123!"}`
+	w = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodDelete, "/api/v1/users/me", strings.NewReader(deleteBody))
+	req.Header.Set("Authorization", "Bearer "+access)
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusNoContent, w.Code, w.Body.String())
+
+	// 5. Попытка регистрации с тем же email -> должна вернуть 409 с account_deleted
+	registerBody = `{"email":"deleted@example.com","password":"NewPassword123!","username":"newuser"}`
+	w = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/auth/register", strings.NewReader(registerBody))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusConflict, w.Code, w.Body.String())
+
+	var errorResp map[string]interface{}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &errorResp))
+	require.Equal(t, "account_deleted", errorResp["error"].(map[string]interface{})["code"])
+}

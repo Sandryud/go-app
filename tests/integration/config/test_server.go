@@ -115,3 +115,15 @@ func ForceEmailChangeForTests(t *testing.T, userID, newEmail string) {
 		t.Fatalf("failed to change user email in tests: %v", err)
 	}
 }
+
+// SoftDeleteUserForTests принудительно помечает пользователя как удалённого в БД
+// для интеграционных тестов.
+func SoftDeleteUserForTests(t *testing.T, email string) {
+	t.Helper()
+	if testDB == nil {
+		t.Fatalf("test database is not initialized")
+	}
+	if err := testDB.Exec(`UPDATE users SET deleted_at = NOW() WHERE email = $1`, email).Error; err != nil {
+		t.Fatalf("failed to soft delete user in tests: %v", err)
+	}
+}

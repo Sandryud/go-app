@@ -53,6 +53,7 @@
   - `400 invalid_request` — невалидное тело.
   - `409 email_already_exists` — email занят (аккаунт уже подтверждён).
   - `409 email_unverified` — аккаунт с таким email существует, но не подтверждён. Запросите новый код подтверждения через `/api/v1/auth/resend-verification`.
+  - `409 account_deleted` — аккаунт с таким email был удалён. Используйте эндпоинт восстановления аккаунта `/api/v1/auth/restore`. Сообщение: "Account with this email was deleted. Use the account restoration endpoint."
   - `409 username_already_exists` — username занят.
 
 Пример:
@@ -95,6 +96,7 @@ curl -i -X POST http://localhost:8080/api/v1/auth/register \
   - `400 invalid_request`
   - `401 invalid_credentials` — неверный email или пароль.
   - `403 email_not_verified` — email не подтверждён. Используйте `/api/v1/auth/verify-email` для подтверждения.
+  - `403 account_deleted` — аккаунт был удалён. Хотите восстановить его? Используйте `/api/v1/auth/restore` для восстановления. Сообщение: "Your account was deleted. Would you like to restore it?"
 
 Пример:
 
@@ -225,6 +227,49 @@ curl -i -X POST http://localhost:8080/api/v1/auth/resend-verification \
 curl -i -X POST http://localhost:8080/api/v1/auth/refresh \
   -H "Content-Type: application/json" \
   -d '{"refresh_token":"..."}'
+```
+
+---
+
+### POST `/api/v1/auth/restore`
+
+- **Описание**: восстановление удалённого аккаунта по email и паролю. Восстанавливает мягко удалённый аккаунт и возвращает пару access/refresh токенов.
+- **Тело**:
+
+```json
+{
+  "email": "user1@example.com",
+  "password": "Password123!"
+}
+```
+
+- **Успех**: `200 OK` + профиль пользователя и токены.
+
+```json
+{
+  "user_id": "3691663d-0fb2-4cc4-a0c3-8ad710d00835",
+  "email": "user1@example.com",
+  "username": "user1",
+  "tokens": {
+    "access_token": "...",
+    "refresh_token": "..."
+  }
+}
+```
+
+- **Ошибки**:
+  - `400 invalid_request` — невалидное тело запроса. Сообщение: "Invalid request body".
+  - `400 account_not_deleted` — попытка восстановить аккаунт, который не был удалён. Сообщение: "Account is not deleted".
+  - `401 invalid_credentials` — неверный email или пароль. Сообщение: "Invalid email or password".
+  - `403 email_not_verified` — email не подтверждён. Сообщение: "Email is not verified. Please verify your email first."
+  - `500 internal_error` — внутренняя ошибка сервера. Сообщение: "Internal server error".
+
+Пример:
+
+```bash
+curl -i -X POST http://localhost:8080/api/v1/auth/restore \
+  -H "Content-Type: application/json" \
+  -d '{"email":"user1@example.com","password":"Password123!"}'
 ```
 
 ---

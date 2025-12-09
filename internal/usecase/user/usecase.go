@@ -9,6 +9,7 @@ import (
 
 	domain "workout-app/internal/domain/user"
 	repo "workout-app/internal/repository/interfaces"
+	"workout-app/pkg/jwt"
 	"workout-app/pkg/mailer"
 	"workout-app/pkg/password"
 	"workout-app/pkg/verification"
@@ -69,12 +70,14 @@ var (
 	ErrVerificationCodeInvalid      = fmt.Errorf("verification code invalid")
 	ErrVerificationAttemptsExceeded = fmt.Errorf("verification attempts exceeded")
 	ErrInvalidPassword              = fmt.Errorf("invalid password")
+	ErrEmailNotVerified             = fmt.Errorf("email not verified")
 )
 
 type service struct {
 	users           repo.UserRepository
 	emailVerifs     repo.EmailVerificationRepository
 	emailSender     mailer.EmailSender
+	jwtService      jwt.Service
 	verificationTTL time.Duration
 	maxAttempts     int
 	codeLength      int
@@ -85,6 +88,7 @@ func NewService(
 	users repo.UserRepository,
 	emailVerifs repo.EmailVerificationRepository,
 	emailSender mailer.EmailSender,
+	jwtService jwt.Service,
 	verificationTTL time.Duration,
 	maxAttempts int,
 	codeLength int,
@@ -93,6 +97,7 @@ func NewService(
 		users:           users,
 		emailVerifs:     emailVerifs,
 		emailSender:     emailSender,
+		jwtService:      jwtService,
 		verificationTTL: verificationTTL,
 		maxAttempts:     maxAttempts,
 		codeLength:      codeLength,

@@ -1,5 +1,7 @@
 package auth
 
+import "workout-app/internal/handler/response"
+
 // RegisterRequest описывает тело запроса регистрации пользователя.
 // Контракт намеренно минимальный: только данные, необходимые для аутентификации.
 type RegisterRequest struct {
@@ -39,22 +41,30 @@ type ResendVerificationResponse struct {
 	Message string `json:"message"`
 }
 
-// TokenPair описывает пару access/refresh токенов.
-type TokenPair struct {
-	AccessToken  string `json:"access_token"`
-	RefreshToken string `json:"refresh_token"`
-}
-
 // LoginResponse — ответ при успешной аутентификации/регистрации.
 // Содержит пару токенов и базовую идентифицирующую информацию о пользователе.
 type LoginResponse struct {
-	UserID   string    `json:"user_id"`
-	Email    string    `json:"email"`
-	Username string    `json:"username"`
-	Tokens   TokenPair `json:"tokens"`
+	UserID   string             `json:"user_id"`
+	Email    string             `json:"email"`
+	Username string             `json:"username"`
+	Tokens   response.TokenPair `json:"tokens"`
 }
 
 // RefreshRequest описывает тело запроса обновления токенов.
 type RefreshRequest struct {
 	RefreshToken string `json:"refresh_token" binding:"required"`
+}
+
+// RestoreAccountRequest описывает тело запроса для восстановления аккаунта.
+type RestoreAccountRequest struct {
+	Email    string `json:"email" binding:"required,email"`
+	Password string `json:"password" binding:"required"`
+}
+
+// RestoreAccountResponse описывает ответ при успешном восстановлении аккаунта.
+type RestoreAccountResponse struct {
+	UserID   string             `json:"user_id"`
+	Email    string             `json:"email"`
+	Username string             `json:"username"`
+	Tokens   response.TokenPair `json:"tokens"`
 }

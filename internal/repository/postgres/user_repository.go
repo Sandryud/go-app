@@ -281,3 +281,43 @@ func (r *UserRepository) SoftDelete(ctx context.Context, id uuid.UUID) error {
 
 	return nil
 }
+
+// GetByEmailIncludingDeleted возвращает пользователя по email, включая удалённых.
+func (r *UserRepository) GetByEmailIncludingDeleted(ctx context.Context, email string) (*domain.User, error) {
+	var model pgUser
+	err := r.db.WithContext(ctx).
+		Where("email = ?", email).
+		Take(&model).Error
+
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, repo.ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return model.toDomain()
+}
+
+// RestoreAccount восстанавливает мягко удалённый аккаунт.
+// Возвращает ErrNotFound, если аккаунт не найден или уже восстановлен (deleted_at IS NULL).
+func (r *UserRepository) RestoreAccount(ctx context.Context, id uuid.UUID) error {
+	now := time.Now().UTC()
+
+	result := r.db.WithContext(ctx).
+		Model(&pgUser{}).
+		Where("id = ? AND deleted_at IS NOT NULL", id.String()).
+		Updates(map[string]interface{}{
+			"deleted_at": nil,
+			"updated_at": now,
+		})
+
+	if result.Error != nil {
+		return result.Error
+	}
+
+	if result.RowsAffected == 0 {
+		return repo.ErrNotFound
+	}
+
+	return nil
+}

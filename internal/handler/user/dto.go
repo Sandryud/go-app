@@ -1,6 +1,8 @@
 package user
 
-import "time"
+import (
+	"time"
+)
 
 // ProfileResponse описывает профиль текущего пользователя.
 // Этот контракт используется в защищённых эндпоинтах (/api/v1/users/me и т.п.).

@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 
 	authhandler "workout-app/internal/handler/auth"
@@ -17,13 +18,13 @@ import (
 	testcfg "workout-app/tests/integration/config"
 )
 
-// TestUser_Profile_Flow проверяет сценарий:
-// register -> /users/me -> update -> /users/me -> delete -> /users/me (404).
-func TestUser_Profile_Flow(t *testing.T) {
-	router := testcfg.NewTestRouter(t)
+// registerAndLoginUser регистрирует пользователя, подтверждает email и выполняет логин.
+// Возвращает userID и accessToken.
+func registerAndLoginUser(t *testing.T, router *gin.Engine, email, password, username string) (string, string) {
+	t.Helper()
 
-	// 1. Регистрация
-	registerBody := `{"email":"uflow@example.com","password":"Password123!","username":"uflow"}`
+	// Регистрация
+	registerBody := `{"email":"` + email + `","password":"` + password + `","username":"` + username + `"}`
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/register", strings.NewReader(registerBody))
 	req.Header.Set("Content-Type", "application/json")
@@ -32,15 +33,15 @@ func TestUser_Profile_Flow(t *testing.T) {
 
 	var regResp authhandler.RegisterResponse
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &regResp))
-	require.Equal(t, "uflow@example.com", regResp.Email)
-	require.Equal(t, "uflow", regResp.Username)
-	require.NotEmpty(t, regResp.UserID)
+	require.Equal(t, email, regResp.Email)
+	require.Equal(t, username, regResp.Username)
+	userID := regResp.UserID
 
-	// Форсируем подтверждение email в БД для получения токенов через логин.
-	testcfg.VerifyUserEmailForTests(t, regResp.Email)
+	// Подтверждение email
+	testcfg.VerifyUserEmailForTests(t, email)
 
-	// Выполняем логин, чтобы получить access-токен.
-	loginBody := `{"email":"uflow@example.com","password":"Password123!"}`
+	// Логин
+	loginBody := `{"email":"` + email + `","password":"` + password + `"}`
 	w = httptest.NewRecorder()
 	req = httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", strings.NewReader(loginBody))
 	req.Header.Set("Content-Type", "application/json")
@@ -49,11 +50,37 @@ func TestUser_Profile_Flow(t *testing.T) {
 
 	var loginResp authhandler.LoginResponse
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &loginResp))
-	access := loginResp.Tokens.AccessToken
+	accessToken := loginResp.Tokens.AccessToken
+	require.NotEmpty(t, accessToken)
+
+	return userID, accessToken
+}
+
+// deleteUserAccount удаляет аккаунт пользователя с подтверждением пароля.
+func deleteUserAccount(t *testing.T, router *gin.Engine, accessToken, password string) {
+	t.Helper()
+
+	deleteBody := `{"password":"` + password + `"}`
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/users/me", strings.NewReader(deleteBody))
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusNoContent, w.Code, w.Body.String())
+}
+
+// TestUser_Profile_Flow проверяет сценарий:
+// register -> /users/me -> update -> /users/me -> delete -> /users/me (404) ->
+// login (403 account_deleted) -> restore -> /users/me (200).
+func TestUser_Profile_Flow(t *testing.T) {
+	router := testcfg.NewTestRouter(t)
+
+	// 1. Регистрация, подтверждение email и логин
+	userID, access := registerAndLoginUser(t, router, "uflow@example.com", "Password123!", "uflow")
 
 	// 2. GET /users/me
-	w = httptest.NewRecorder()
-	req = httptest.NewRequest(http.MethodGet, "/api/v1/users/me", nil)
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/users/me", nil)
 	req.Header.Set("Authorization", "Bearer "+access)
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
@@ -77,13 +104,7 @@ func TestUser_Profile_Flow(t *testing.T) {
 	require.Equal(t, "intermediate", updated.TrainingLevel)
 
 	// 4. DELETE /users/me (с подтверждением пароля)
-	deleteBody := `{"password":"Password123!"}`
-	w = httptest.NewRecorder()
-	req = httptest.NewRequest(http.MethodDelete, "/api/v1/users/me", strings.NewReader(deleteBody))
-	req.Header.Set("Authorization", "Bearer "+access)
-	req.Header.Set("Content-Type", "application/json")
-	router.ServeHTTP(w, req)
-	require.Equal(t, http.StatusNoContent, w.Code, w.Body.String())
+	deleteUserAccount(t, router, access, "Password123!")
 
 	// 5. GET /users/me после удаления -> 404
 	w = httptest.NewRecorder()
@@ -91,6 +112,46 @@ func TestUser_Profile_Flow(t *testing.T) {
 	req.Header.Set("Authorization", "Bearer "+access)
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusNotFound, w.Code, w.Body.String())
+
+	// 6. Попытка логина после удаления -> 403 account_deleted
+	loginBody := `{"email":"uflow@example.com","password":"Password123!"}`
+	w = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", strings.NewReader(loginBody))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusForbidden, w.Code, w.Body.String())
+	var errorResp map[string]interface{}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &errorResp))
+	require.Equal(t, "account_deleted", errorResp["error"].(map[string]interface{})["code"])
+
+	// 7. Восстановление аккаунта через POST /api/v1/auth/restore -> возвращает профиль и токены
+	restoreBody := `{"email":"uflow@example.com","password":"Password123!"}`
+	w = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/auth/restore", strings.NewReader(restoreBody))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	var restoredResp authhandler.RestoreAccountResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &restoredResp))
+	require.Equal(t, userID, restoredResp.UserID)
+	require.Equal(t, "uflow@example.com", restoredResp.Email)
+	require.Equal(t, "uflownew", restoredResp.Username)
+	require.NotEmpty(t, restoredResp.Tokens.AccessToken)
+	require.NotEmpty(t, restoredResp.Tokens.RefreshToken)
+
+	// 8. Проверка что профиль доступен через GET /users/me с токеном из восстановления
+	newAccess := restoredResp.Tokens.AccessToken
+	w = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/users/me", nil)
+	req.Header.Set("Authorization", "Bearer "+newAccess)
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	var restoredProfile userhandler.ProfileResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &restoredProfile))
+	require.Equal(t, "uflownew", restoredProfile.Username)
+	require.Equal(t, "intermediate", restoredProfile.TrainingLevel)
 }
 
 // TestUser_GetByID проверяет endpoint GET /api/v1/users/:id:
@@ -197,4 +258,138 @@ func TestUser_GetByID(t *testing.T) {
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/users/"+user1ID, nil)
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusUnauthorized, w.Code, w.Body.String())
+}
+
+// TestUser_Restore_Account проверяет полный сценарий восстановления аккаунта:
+// регистрация -> подтверждение email -> логин -> удаление -> попытка логина (403) ->
+// попытка регистрации (409) -> восстановление (возвращает токены) -> проверка профиля.
+func TestUser_Restore_Account(t *testing.T) {
+	router := testcfg.NewTestRouter(t)
+
+	// 1. Регистрация, подтверждение email и удаление аккаунта
+	userID, access := registerAndLoginUser(t, router, "restore@example.com", "Password123!", "restoreuser")
+	deleteUserAccount(t, router, access, "Password123!")
+
+	// 5. Попытка логина -> должна вернуть 403 с account_deleted
+	loginBody := `{"email":"restore@example.com","password":"Password123!"}`
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", strings.NewReader(loginBody))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusForbidden, w.Code, w.Body.String())
+	var errorResp map[string]interface{}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &errorResp))
+	require.Equal(t, "account_deleted", errorResp["error"].(map[string]interface{})["code"])
+
+	// 6. Попытка регистрации с тем же email -> должна вернуть 409 с account_deleted
+	registerBody := `{"email":"restore@example.com","password":"NewPassword123!","username":"newuser"}`
+	w = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/auth/register", strings.NewReader(registerBody))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusConflict, w.Code, w.Body.String())
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &errorResp))
+	require.Equal(t, "account_deleted", errorResp["error"].(map[string]interface{})["code"])
+
+	// 7. Восстановление аккаунта через POST /api/v1/auth/restore -> 200 с токенами
+	restoreBody := `{"email":"restore@example.com","password":"Password123!"}`
+	w = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/auth/restore", strings.NewReader(restoreBody))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	var restoredResp authhandler.RestoreAccountResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &restoredResp))
+	require.Equal(t, userID, restoredResp.UserID)
+	require.Equal(t, "restore@example.com", restoredResp.Email)
+	require.Equal(t, "restoreuser", restoredResp.Username)
+	require.NotEmpty(t, restoredResp.Tokens.AccessToken)
+	require.NotEmpty(t, restoredResp.Tokens.RefreshToken)
+
+	// 8. Проверка что профиль доступен через GET /users/me с токеном из восстановления
+	newAccess := restoredResp.Tokens.AccessToken
+	w = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/users/me", nil)
+	req.Header.Set("Authorization", "Bearer "+newAccess)
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	var profile userhandler.ProfileResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &profile))
+	require.Equal(t, userID, profile.ID)
+	require.Equal(t, "restore@example.com", profile.Email)
+	require.Equal(t, "restoreuser", profile.Username)
+}
+
+// TestUser_Restore_Account_InvalidCredentials проверяет восстановление аккаунта с неверным паролем.
+func TestUser_Restore_Account_InvalidCredentials(t *testing.T) {
+	router := testcfg.NewTestRouter(t)
+
+	// 1. Регистрация, подтверждение email и удаление аккаунта
+	_, access := registerAndLoginUser(t, router, "restoreinvalid@example.com", "Password123!", "restoreinvalid")
+	deleteUserAccount(t, router, access, "Password123!")
+
+	// 2. Попытка восстановления с неверным паролем -> 401 invalid_credentials
+	restoreBody := `{"email":"restoreinvalid@example.com","password":"WrongPassword123!"}`
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/restore", strings.NewReader(restoreBody))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusUnauthorized, w.Code, w.Body.String())
+
+	var errorResp map[string]interface{}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &errorResp))
+	require.Equal(t, "invalid_credentials", errorResp["error"].(map[string]interface{})["code"])
+}
+
+// TestUser_Restore_Account_NotDeleted проверяет попытку восстановления не удалённого аккаунта.
+func TestUser_Restore_Account_NotDeleted(t *testing.T) {
+	router := testcfg.NewTestRouter(t)
+
+	// 1. Регистрация и подтверждение email (аккаунт не удалён)
+	registerAndLoginUser(t, router, "restorenotdeleted@example.com", "Password123!", "restorenotdeleted")
+
+	// 2. Попытка восстановления не удалённого аккаунта -> 400 account_not_deleted
+	restoreBody := `{"email":"restorenotdeleted@example.com","password":"Password123!"}`
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/restore", strings.NewReader(restoreBody))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
+
+	var errorResp map[string]interface{}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &errorResp))
+	require.Equal(t, "account_not_deleted", errorResp["error"].(map[string]interface{})["code"])
+}
+
+// TestUser_Restore_Account_EmailNotVerified проверяет восстановление аккаунта с неподтверждённым email.
+func TestUser_Restore_Account_EmailNotVerified(t *testing.T) {
+	router := testcfg.NewTestRouter(t)
+
+	// 1. Регистрация без подтверждения email
+	registerBody := `{"email":"restoreunverified@example.com","password":"Password123!","username":"restoreunverified"}`
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/register", strings.NewReader(registerBody))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
+
+	var regResp authhandler.RegisterResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &regResp))
+
+	// 2. Удаление аккаунта (без подтверждения email)
+	testcfg.SoftDeleteUserForTests(t, regResp.Email)
+
+	// 3. Попытка восстановления аккаунта с неподтверждённым email -> 403 email_not_verified
+	restoreBody := `{"email":"restoreunverified@example.com","password":"Password123!"}`
+	w = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/auth/restore", strings.NewReader(restoreBody))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusForbidden, w.Code, w.Body.String())
+
+	var errorResp map[string]interface{}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &errorResp))
+	require.Equal(t, "email_not_verified", errorResp["error"].(map[string]interface{})["code"])
 }

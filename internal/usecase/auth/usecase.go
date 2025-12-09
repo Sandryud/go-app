@@ -2,7 +2,6 @@ package auth
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
@@ -37,6 +36,11 @@ type Service interface {
 	// ResendVerificationCode повторно отправляет код подтверждения email,
 	// если аккаунт существует и ещё не подтверждён.
 	ResendVerificationCode(ctx context.Context, email string) error
+
+	// RestoreAccount восстанавливает удалённый аккаунт по email и паролю.
+	// Возвращает пользователя и пару access/refresh токенов.
+	// Требует, чтобы email был подтверждён.
+	RestoreAccount(ctx context.Context, email, password string) (*domain.User, string, string, error)
 }
 
 // Ошибки бизнес-логики usecase-слоя.
@@ -49,6 +53,8 @@ var (
 	ErrInvalidCredentials           = fmt.Errorf("invalid email or password")
 	ErrInvalidRefreshToken          = fmt.Errorf("invalid refresh token")
 	ErrEmailUnverifiedExists        = fmt.Errorf("unverified account with this email already exists")
+	ErrAccountDeleted               = fmt.Errorf("account is deleted")
+	ErrAccountNotDeleted            = fmt.Errorf("account is not deleted")
 )
 
 type service struct {
@@ -90,6 +96,27 @@ func (s *service) Register(ctx context.Context, email, rawPassword, username str
 		return nil, fmt.Errorf("email, password and username are required")
 	}
 
+	// Проверяем, существует ли пользователь (включая удалённых)
+	existing, err := s.users.GetByEmailIncludingDeleted(ctx, email)
+	if err != nil {
+		if err != repo.ErrNotFound {
+			return nil, err
+		}
+		// err == repo.ErrNotFound - продолжаем создание нового пользователя
+	} else {
+		// Пользователь найден
+		if existing.IsDeleted() {
+			// Аккаунт удалён - предлагаем восстановление
+			return nil, ErrAccountDeleted
+		}
+		if existing.IsEmailVerified {
+			// Обычный конфликт: подтверждённый email.
+			return nil, repo.ErrEmailExists
+		}
+		// Email уже существует, но не подтверждён.
+		return nil, ErrEmailUnverifiedExists
+	}
+
 	// Хешируем пароль на уровне usecase.
 	hashed, err := password.Hash(rawPassword)
 	if err != nil {
@@ -100,19 +127,6 @@ func (s *service) Register(ctx context.Context, email, rawPassword, username str
 	user.IsEmailVerified = false
 
 	if err := s.users.Create(ctx, user); err != nil {
-		// Дополнительно различаем случай, когда существует неподтверждённый аккаунт.
-		if errors.Is(err, repo.ErrEmailExists) {
-			existing, getErr := s.users.GetByEmail(ctx, email)
-			if getErr != nil {
-				return nil, err
-			}
-			if existing.IsEmailVerified {
-				// Обычный конфликт: подтверждённый email.
-				return nil, repo.ErrEmailExists
-			}
-			// Email уже существует, но не подтверждён.
-			return nil, ErrEmailUnverifiedExists
-		}
 		return nil, err
 	}
 
@@ -205,7 +219,8 @@ func (s *service) Login(ctx context.Context, email, rawPassword string) (*domain
 		return nil, "", "", fmt.Errorf("email and password are required")
 	}
 
-	user, err := s.users.GetByEmail(ctx, email)
+	// Используем метод, который находит пользователя включая удалённых
+	user, err := s.users.GetByEmailIncludingDeleted(ctx, email)
 	if err != nil {
 		if err == repo.ErrNotFound {
 			return nil, "", "", ErrInvalidCredentials
@@ -213,8 +228,14 @@ func (s *service) Login(ctx context.Context, email, rawPassword string) (*domain
 		return nil, "", "", err
 	}
 
+	// Проверяем пароль
 	if err := password.Compare(user.PasswordHash, rawPassword); err != nil {
 		return nil, "", "", ErrInvalidCredentials
+	}
+
+	// Проверяем, удалён ли аккаунт
+	if user.IsDeleted() {
+		return nil, "", "", ErrAccountDeleted
 	}
 
 	if !user.IsEmailVerified {
@@ -342,4 +363,61 @@ func (s *service) createAndSendVerificationCode(ctx context.Context, user *domai
 	}
 
 	return nil
+}
+
+// RestoreAccount восстанавливает удалённый аккаунт по email и паролю.
+// Возвращает пользователя и пару access/refresh токенов.
+// Требует, чтобы email был подтверждён.
+func (s *service) RestoreAccount(ctx context.Context, email, rawPassword string) (*domain.User, string, string, error) {
+	if email == "" || rawPassword == "" {
+		return nil, "", "", fmt.Errorf("email and password are required")
+	}
+
+	// Находим пользователя включая удалённых
+	user, err := s.users.GetByEmailIncludingDeleted(ctx, email)
+	if err != nil {
+		if err == repo.ErrNotFound {
+			return nil, "", "", ErrInvalidCredentials
+		}
+		return nil, "", "", err
+	}
+
+	// Проверяем пароль
+	if err := password.Compare(user.PasswordHash, rawPassword); err != nil {
+		return nil, "", "", ErrInvalidCredentials
+	}
+
+	// Проверяем, что аккаунт действительно удалён
+	if !user.IsDeleted() {
+		return nil, "", "", ErrAccountNotDeleted
+	}
+
+	// Восстанавливаем аккаунт
+	if err := s.users.RestoreAccount(ctx, user.ID); err != nil {
+		return nil, "", "", fmt.Errorf("failed to restore account: %w", err)
+	}
+
+	// Перезагружаем пользователя из БД для синхронизации доменной модели
+	restoredUser, err := s.users.GetByID(ctx, user.ID)
+	if err != nil {
+		return nil, "", "", fmt.Errorf("failed to get restored user: %w", err)
+	}
+
+	// Проверяем, что email подтверждён (необходимо для генерации токенов)
+	if !restoredUser.IsEmailVerified {
+		return nil, "", "", ErrEmailNotVerified
+	}
+
+	// Генерируем токены
+	access, err := s.jwt.GenerateAccessToken(restoredUser)
+	if err != nil {
+		return nil, "", "", fmt.Errorf("failed to generate access token: %w", err)
+	}
+
+	refresh, _, err := s.jwt.GenerateRefreshToken(restoredUser)
+	if err != nil {
+		return nil, "", "", fmt.Errorf("failed to generate refresh token: %w", err)
+	}
+
+	return restoredUser, access, refresh, nil
 }

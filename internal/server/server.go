@@ -102,17 +102,18 @@ func NewServer(cfg *config.Config, db *database.DB) *Server {
 		cfg.Email.VerificationCodeLength,
 	)
 
-	// userService использует тот же emailSender, что и authService
+	// userService использует тот же emailSender и jwtService, что и authService
 	userService := useruc.NewService(
 		userRepo,
 		emailVerifRepo,
 		emailSender,
+		s.jwtService,
 		cfg.Email.VerificationTTL,
 		cfg.Email.VerificationMaxAttempts,
 		cfg.Email.VerificationCodeLength,
 	)
 
-	s.authHandler = authhandler.NewHandler(authService)
+	s.authHandler = authhandler.NewHandler(authService, s.logger)
 	s.userHandler = userhandler.NewHandler(userService, s.logger)
 
 	// Настраиваем middleware и роуты
@@ -176,6 +177,8 @@ func (s *Server) setupAuthRoutes() {
 		authGroup.POST("/resend-verification", s.authHandler.ResendVerification)
 		// POST /api/v1/auth/refresh — обновление пары access/refresh токенов по refresh-токену.
 		authGroup.POST("/refresh", s.authHandler.Refresh)
+		// POST /api/v1/auth/restore — восстановить удалённый аккаунт по email и паролю.
+		authGroup.POST("/restore", s.authHandler.RestoreAccount)
 	}
 }
 
