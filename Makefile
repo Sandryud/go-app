@@ -1,4 +1,3 @@
-.PHONY: help run build test clean migrate-up migrate-down migrate-version migrate-steps swagger
 
 help: ## Показать это сообщение с помощью
 	@echo 'Usage: make [target]'
@@ -82,4 +81,9 @@ swagger: ## Сгенерировать Swagger/OpenAPI документацию
 	fi
 	@swag init -g cmd/server/main.go -o api/swagger --parseDependency --parseInternal
 	@echo "Swagger документация успешно сгенерирована в api/swagger/"
+
+exercises-json: ## Сгенерировать exercises.json из CSV (data/csv → dist/exercises.json)
+	@echo "Генерация каталога упражнений из CSV..."
+	@go run ./cmd/csv2json -csv data/csv -out dist/exercises.json
+	@echo "Каталог записан в dist/exercises.json"
 
