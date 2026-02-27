@@ -12,12 +12,13 @@ import (
 
 // Config хранит всю конфигурацию приложения
 type Config struct {
-	Server   ServerConfig
-	Database DatabaseConfig
-	CORS     CORSConfig
-	JWT      JWTConfig
-	Email    EmailConfig
-	AppEnv   string // Окружение приложения: development, production, etc.
+	Server               ServerConfig
+	Database             DatabaseConfig
+	CORS                 CORSConfig
+	JWT                  JWTConfig
+	Email                EmailConfig
+	AppEnv               string // Окружение приложения: development, production, etc.
+	ExercisesCatalogPath string // Путь к файлу каталога упражнений (dist/exercises.json)
 }
 
 // ServerConfig хранит конфигурацию сервера
@@ -135,6 +136,9 @@ func Load() (*Config, error) {
 	// Загружаем конфигурацию CORS
 	cfg.CORS = loadCORSConfig(cfg.AppEnv)
 
+	// Путь к каталогу упражнений (генерируется скриптом csv2json)
+	cfg.ExercisesCatalogPath = getEnv("EXERCISES_CATALOG_PATH", "dist/exercises.json")
+
 	// Валидируем конфигурацию
 	if err := cfg.Validate(); err != nil {
 		return nil, fmt.Errorf("configuration validation error: %w", err)
@@ -191,6 +195,9 @@ func (c *Config) Validate() error {
 	}
 	if c.Email.VerificationCodeLength <= 0 {
 		return fmt.Errorf("EMAIL_VERIFICATION_CODE_LENGTH must be positive")
+	}
+	if c.ExercisesCatalogPath == "" {
+		return fmt.Errorf("EXERCISES_CATALOG_PATH must not be empty")
 	}
 	return nil
 }

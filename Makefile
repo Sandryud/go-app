@@ -75,11 +75,13 @@ docker-build: ## Собрать Docker образ приложения
 
 swagger: ## Сгенерировать Swagger/OpenAPI документацию
 	@echo "Генерация Swagger документации..."
-	@if ! command -v swag &> /dev/null; then \
+	@SWAG="$$(command -v swag 2>/dev/null || echo "$$(go env GOPATH)/bin/swag")"; \
+	if [ -z "$$SWAG" ] || [ ! -x "$$SWAG" ]; then \
 		echo "Ошибка: swag не найден. Установите его командой: go install github.com/swaggo/swag/cmd/swag@latest"; \
+		echo "Убедитесь, что $$(go env GOPATH)/bin в PATH"; \
 		exit 1; \
-	fi
-	@swag init -g cmd/server/main.go -o api/swagger --parseDependency --parseInternal
+	fi; \
+	"$$SWAG" init -g cmd/server/main.go -o api/swagger --parseDependency --parseInternal
 	@echo "Swagger документация успешно сгенерирована в api/swagger/"
 
 exercises-json: ## Сгенерировать exercises.json из CSV (data/csv → dist/exercises.json)

@@ -29,6 +29,7 @@ func Auth(jwtService jwtsvc.Service, log logger.Logger) gin.HandlerFunc {
 				"method": c.Request.Method,
 			})
 			response.Error(c, http.StatusUnauthorized, "missing_authorization_header", "Missing Authorization header", nil)
+			c.Abort()
 			return
 		}
 
@@ -40,6 +41,7 @@ func Auth(jwtService jwtsvc.Service, log logger.Logger) gin.HandlerFunc {
 				"value":  authHeader,
 			})
 			response.Error(c, http.StatusUnauthorized, "invalid_authorization_header", "Invalid Authorization header format", nil)
+			c.Abort()
 			return
 		}
 
@@ -50,6 +52,7 @@ func Auth(jwtService jwtsvc.Service, log logger.Logger) gin.HandlerFunc {
 				"method": c.Request.Method,
 			})
 			response.Error(c, http.StatusUnauthorized, "invalid_authorization_header", "Invalid Authorization header format", nil)
+			c.Abort()
 			return
 		}
 
@@ -61,6 +64,7 @@ func Auth(jwtService jwtsvc.Service, log logger.Logger) gin.HandlerFunc {
 				"error":  err.Error(),
 			})
 			response.Error(c, http.StatusUnauthorized, "invalid_token", "Invalid access token", nil)
+			c.Abort()
 			return
 		}
 

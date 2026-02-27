@@ -379,6 +379,78 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/exercises/data": {
+            "get": {
+                "description": "Возвращает полный файл exercises.json. Поддерживает ETag: при заголовке If-None-Match, совпадающем с текущей версией, возвращается 304 Not Modified.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "exercises"
+                ],
+                "summary": "Данные каталога упражнений",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "ETag версии каталога для условного запроса",
+                        "name": "If-None-Match",
+                        "in": "header"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Полный JSON каталога (meta + exercises)",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "304": {
+                        "description": "Not Modified — версия клиента совпадает с текущей, тело пустое",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "404": {
+                        "description": "Файл каталога не найден",
+                        "schema": {
+                            "$ref": "#/definitions/workout-app_internal_handler_response.ErrorBody"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workout-app_internal_handler_response.ErrorBody"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/exercises/version": {
+            "get": {
+                "description": "Возвращает текущую версию каталога (meta.version из exercises.json).",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "exercises"
+                ],
+                "summary": "Версия каталога упражнений",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler_exercises.VersionResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workout-app_internal_handler_response.ErrorBody"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/users/me": {
             "get": {
                 "security": [
@@ -884,6 +956,14 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "email": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_handler_exercises.VersionResponse": {
+            "type": "object",
+            "properties": {
+                "version": {
                     "type": "string"
                 }
             }

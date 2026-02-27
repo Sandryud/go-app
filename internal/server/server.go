@@ -17,12 +17,15 @@ import (
 	"workout-app/internal/database"
 	domain "workout-app/internal/domain/user"
 	authhandler "workout-app/internal/handler/auth"
+	exerciseshandler "workout-app/internal/handler/exercises"
 	"workout-app/internal/handler/health"
 	"workout-app/internal/handler/middleware"
 	userhandler "workout-app/internal/handler/user"
 	"workout-app/internal/mailer"
+	filerepo "workout-app/internal/repository/file"
 	pgrepo "workout-app/internal/repository/postgres"
 	authuc "workout-app/internal/usecase/auth"
+	exercisesuc "workout-app/internal/usecase/exercises"
 	useruc "workout-app/internal/usecase/user"
 	"workout-app/pkg/jwt"
 	"workout-app/pkg/logger"
@@ -39,10 +42,11 @@ type Server struct {
 	db         *database.DB
 	cfg        *config.Config
 
-	logger      logger.Logger
-	jwtService  jwt.Service
-	authHandler *authhandler.Handler
-	userHandler *userhandler.Handler
+	logger           logger.Logger
+	jwtService       jwt.Service
+	authHandler      *authhandler.Handler
+	userHandler      *userhandler.Handler
+	exercisesHandler *exerciseshandler.Handler
 }
 
 // loggerEmailSender — простая реализация EmailSender, логирующая коды в логгер.
@@ -116,6 +120,10 @@ func NewServer(cfg *config.Config, db *database.DB) *Server {
 	s.authHandler = authhandler.NewHandler(authService, s.logger)
 	s.userHandler = userhandler.NewHandler(userService, s.logger)
 
+	exercisesRepo := filerepo.NewExercisesRepository(cfg.ExercisesCatalogPath)
+	exercisesService := exercisesuc.NewService(exercisesRepo)
+	s.exercisesHandler = exerciseshandler.NewHandler(exercisesService, s.logger)
+
 	// Настраиваем middleware и роуты
 	s.setupMiddleware()
 	s.setupRoutes()
@@ -140,6 +148,7 @@ func (s *Server) setupRoutes() {
 	s.setupHealthRoutes()
 	s.setupAuthRoutes()
 	s.setupUserRoutes()
+	s.setupExercisesRoutes()
 
 	s.router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 }
@@ -209,6 +218,19 @@ func (s *Server) setupUserRoutes() {
 	{
 		// GET /api/v1/admin/users — список всех активных пользователей (только для admin).
 		adminGroup.GET("/users", s.userHandler.ListUsers)
+	}
+}
+
+// setupExercisesRoutes настраивает эндпоинты каталога упражнений (только для авторизованных пользователей).
+func (s *Server) setupExercisesRoutes() {
+	v1 := s.router.Group("/api/v1")
+	exercisesGroup := v1.Group("/exercises")
+	exercisesGroup.Use(middleware.Auth(s.jwtService, s.logger))
+	{
+		// GET /api/v1/exercises/version — версия каталога упражнений.
+		exercisesGroup.GET("/version", s.exercisesHandler.GetVersion)
+		// GET /api/v1/exercises/data — полный каталог (JSON), поддерживает ETag и 304.
+		exercisesGroup.GET("/data", s.exercisesHandler.GetData)
 	}
 }
 
