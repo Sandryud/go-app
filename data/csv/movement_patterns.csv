@@ -1,0 +1,16 @@
+id,pattern,description
+1,squat,Приседание
+2,hinge,Тазобедренный шарнир
+3,push-horizontal,Горизонтальный жим
+4,push-vertical,Вертикальный жим
+5,pull-horizontal,Горизонтальная тяга
+6,pull-vertical,Вертикальная тяга
+7,rotation,Ротация
+8,anti-rotation,Анти-ротация
+9,carry,Переноска
+10,lunge,Выпады
+11,step,Шаги
+12,jump,Прыжки
+13,crawl,Ползание
+14,bridge,Мостик
+15,plank,Планка

@@ -1,0 +1,15 @@
+id,unit,description
+1,kg,Килограммы
+2,lb,Фунты
+3,seconds,Секунды
+4,minutes,Минуты
+5,meters,Метры
+6,kilometers,Километры
+7,feet,Футы
+8,miles,Мили
+9,reps,Повторения
+10,sets,Подходы
+11,watts,Ватты
+12,calories,Калории
+13,bpm,Удары в минуту
+14,rpe,Воспринимаемая нагрузка

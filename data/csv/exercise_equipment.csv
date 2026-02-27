@@ -1,0 +1,67 @@
+id,equipment,description,category_id
+1,bodyweight,Упражнения с собственным весом,3
+2,dumbbells,Гантели,2
+3,barbell,Штанга,2
+4,kettlebell,Гиря,2
+6,resistance-band,Резиновая лента,2
+7,trx,TRX петли,3
+8,medicine-ball,Медицинский мяч,3
+9,jump-rope,Скакалка,1
+10,ab-wheel,Колесо для пресса,3
+11,dip-bars,Брусья,2
+12,pull-up-bar,Турник,2
+13,bench,Скамья,2
+14,step-platform,Степ-платформа,3
+15,foam-roller,Пенный роллер,4
+16,treadmill,Беговая дорожка,1
+17,stationary-bike,Велотренажёр,1
+18,elliptical,Эллипсоид,1
+19,rowing-machine,Гребной тренажёр,1
+20,assault-bike,Аэробайк,1
+21,cable-machine,Блочный тренажёр,2
+22,smith-machine,Машина Смита,2
+23,leg-press,Жим ногами,2
+24,lat-pulldown,Верхняя тяга,2
+25,chest-press,Рычажный тренажер для груди,2
+26,leg-curl,Сгибание ног,2
+27,leg-extension,Разгибание ног,2
+28,pec-deck,Пек-дек,2
+29,hack-squat,Гакк-машина,2
+30,calf-raise-machine,Икры стоя,2
+31,ez-bar,EZ-гриф,2
+32,trap-bar,Трэп-гриф,2
+33,safety-squat-bar,Сейфти-гриф,2
+34,swiss-bar,Швейцарский гриф,2
+35,preacher-curl-bench,Скамья Скотта,2
+36,hyperextension-bench,Гиперэкстензия,2
+37,roman-chair,Римский стул,2
+38,glute-ham-developer,GHD,2
+39,battle-ropes,Боевые канаты,3
+40,sled,Сани,3
+41,sandbag,Мешок с песком,3
+42,tire,Покрышка,3
+43,plyo-box,Плио-бокс,3
+44,landmine,Лэндмайн,3
+45,suspension-trainer,Петли,3
+46,weight-vest,Жилет-утяжелитель,3
+47,push-up-handles,Упоры для отжиманий,3
+48,parallettes,Параллеты,3
+49,gymnastic-rings,Кольца,3
+50,climbing-rope,Канат,3
+51,bosu-ball,BOSU,3
+52,lacrosse-ball,Массажный мяч,4
+53,massage-gun,Массажный пистолет,4
+54,stretch-strap,Ремень для растяжки,4
+55,yoga-mat,Коврик для йоги,4
+56,balance-board,Балансировочная доска,4
+57,ankle-weights,Утяжелители для ног,5
+58,wrist-weights,Утяжелители для рук,5
+59,dip-belt,Пояс для отягощений,5
+60,resistance-tubes,Эспандеры-трубки,5
+61,incline-bench,Наклонная скамья,2
+62,cable-machine,Блочный тренажер,2
+63,crossover,Кроссовер,2
+64,decline-bench,Скамья с отрицательным наклоном,2
+65,weight-plate,Диск от штанги,2
+66,hammer-strength-row-machine,Рычажный тренажер Hammer Strength для тяги,2
+67,t-bar-row-machine,Т-образный тренажер для тяги,2
