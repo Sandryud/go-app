@@ -87,3 +87,7 @@ exercises-json: ## Сгенерировать exercises.json из CSV (data/csv 
 	@go run ./cmd/csv2json -csv data/csv -out dist/exercises.json
 	@echo "Каталог записан в dist/exercises.json"
 
+validate-csv: ## Проверить CSV-файлы упражнений в data/csv
+	@echo "Валидация CSV в data/csv..."
+	@go run ./cmd/csv-validate -csv data/csv
+

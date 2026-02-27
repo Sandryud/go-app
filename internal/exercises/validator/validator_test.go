@@ -35,7 +35,7 @@ func TestValidate_InvalidDifficulty(t *testing.T) {
 			ID:                 "x",
 			Type:               "strength",
 			Name:               "X",
-			Difficulty:         "expert",
+			Difficulty:         "super",
 			PrimaryMuscleGroup: "chest",
 			TrackingType:       "weight-reps",
 			Location:           "gym",
@@ -44,7 +44,7 @@ func TestValidate_InvalidDifficulty(t *testing.T) {
 	errs := Validate(c)
 	require.Len(t, errs, 1)
 	assert.Contains(t, errs[0], "difficulty")
-	assert.Contains(t, errs[0], "beginner|intermediate|advanced")
+	assert.Contains(t, errs[0], "beginner|intermediate|advanced|expert")
 }
 
 func TestValidate_InvalidPopularity(t *testing.T) {

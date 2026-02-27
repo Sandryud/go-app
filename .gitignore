@@ -39,6 +39,7 @@ Thumbs.db
 # Build output
 /bin
 /dist
+csv-validate
 
 # Prompts directory content
 api/promts/*

@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"workout-app/data/examples"
+	"workout-app/internal/exercises/enums"
 )
 
 // ValidationError holds exercise_id, field, and message.
@@ -17,18 +18,6 @@ type ValidationError struct {
 func (e ValidationError) String() string {
 	return fmt.Sprintf("exercise_id=%q field=%q message=%q", e.ExerciseID, e.Field, e.Message)
 }
-
-var (
-	exerciseTypes     = map[string]bool{"strength": true, "cardio": true, "mobility": true, "plyometric": true}
-	difficulties      = map[string]bool{"beginner": true, "intermediate": true, "advanced": true}
-	locations         = map[string]bool{"gym": true, "home": true, "both": true}
-	warningLevels      = map[string]bool{"critical": true, "important": true, "notice": true}
-	severities         = map[string]bool{"absolute": true, "relative": true}
-	relationships      = map[string]bool{"regression": true, "progression": true, "alternative": true}
-	muscleTypes        = map[string]bool{"primary": true, "secondary": true, "stabilizer": true}
-	mediaTypes         = map[string]bool{"image": true, "video": true}
-	forces             = map[string]bool{"push": true, "pull": true}
-)
 
 // Validate returns a list of validation errors (empty if valid).
 func Validate(c *examples.Catalog) []string {
@@ -62,14 +51,14 @@ func validateExercise(e *examples.Exercise, allIDs map[string]bool) (errs []stri
 	if exerciseID == "" {
 		errs = append(errs, ValidationError{exerciseID, "id", "required"}.String())
 	}
-	if !exerciseTypes[e.Type] {
+	if !enums.ExerciseTypes[e.Type] {
 		errs = append(errs, ValidationError{exerciseID, "type", "must be strength|cardio|mobility|plyometric"}.String())
 	}
 	if e.Name == "" {
 		errs = append(errs, ValidationError{exerciseID, "name", "required"}.String())
 	}
-	if !difficulties[e.Difficulty] {
-		errs = append(errs, ValidationError{exerciseID, "difficulty", "must be beginner|intermediate|advanced"}.String())
+	if !enums.Difficulties[e.Difficulty] {
+		errs = append(errs, ValidationError{exerciseID, "difficulty", "must be beginner|intermediate|advanced|expert"}.String())
 	}
 	if e.PrimaryMuscleGroup == "" {
 		errs = append(errs, ValidationError{exerciseID, "primary_muscle_group", "required"}.String())
@@ -77,7 +66,7 @@ func validateExercise(e *examples.Exercise, allIDs map[string]bool) (errs []stri
 	if e.TrackingType == "" {
 		errs = append(errs, ValidationError{exerciseID, "tracking_type", "required"}.String())
 	}
-	if !locations[e.Location] {
+	if !enums.Locations[e.Location] {
 		errs = append(errs, ValidationError{exerciseID, "location", "must be gym|home|both"}.String())
 	}
 	if e.MinExperienceMonths < 0 {
@@ -87,7 +76,7 @@ func validateExercise(e *examples.Exercise, allIDs map[string]bool) (errs []stri
 		errs = append(errs, ValidationError{exerciseID, "popularity", "must be between 0 and 100"}.String())
 	}
 	for j, m := range e.Muscles {
-		if !muscleTypes[m.Type] {
+		if !enums.MuscleTypes[m.Type] {
 			errs = append(errs, ValidationError{exerciseID, fmt.Sprintf("muscles[%d].type", j), "must be primary|secondary|stabilizer"}.String())
 		}
 		if m.Activation < 0 || m.Activation > 100 {
@@ -95,17 +84,17 @@ func validateExercise(e *examples.Exercise, allIDs map[string]bool) (errs []stri
 		}
 	}
 	for j, w := range e.Warnings {
-		if !warningLevels[w.Level] {
+		if !enums.WarningLevels[w.Level] {
 			errs = append(errs, ValidationError{exerciseID, fmt.Sprintf("warnings[%d].level", j), "must be critical|important|notice"}.String())
 		}
 	}
 	for j, c := range e.Contraindications {
-		if !severities[c.Severity] {
+		if !enums.Severities[c.Severity] {
 			errs = append(errs, ValidationError{exerciseID, fmt.Sprintf("contraindications[%d].severity", j), "must be absolute|relative"}.String())
 		}
 	}
 	for j, r := range e.References {
-		if !relationships[r.Relationship] {
+		if !enums.Relationships[r.Relationship] {
 			errs = append(errs, ValidationError{exerciseID, fmt.Sprintf("references[%d].relationship", j), "must be regression|progression|alternative"}.String())
 		}
 		if r.EffectivenessRating < 0 || r.EffectivenessRating > 100 {
@@ -113,12 +102,12 @@ func validateExercise(e *examples.Exercise, allIDs map[string]bool) (errs []stri
 		}
 	}
 	for j, m := range e.Media {
-		if !mediaTypes[m.Type] {
+		if !enums.MediaTypes[m.Type] {
 			errs = append(errs, ValidationError{exerciseID, fmt.Sprintf("media[%d].type", j), "must be image|video"}.String())
 		}
 	}
 	if e.Strength != nil {
-		if e.Strength.Force != "" && !forces[e.Strength.Force] {
+		if e.Strength.Force != "" && !enums.Forces[e.Strength.Force] {
 			errs = append(errs, ValidationError{exerciseID, "strength.force", "must be push|pull"}.String())
 		}
 		progErrs := validateProgramming(exerciseID, "strength.programming", e.Strength.Programming)
