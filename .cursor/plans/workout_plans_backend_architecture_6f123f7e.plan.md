@@ -1,3 +1,10 @@
+---
+name: Workout Plans Backend Architecture
+overview: "Проектный документ по архитектуре REST API модуля «Планы тренировок»: модель данных PostgreSQL, эндпоинты, бизнес-логика на Go, интеграция с каталогом упражнений и задел под сервис аналитики."
+todos: []
+isProject: false
+---
+
 # Архитектура бэкенда: модуль «Планы тренировок»
 
 ## 1. Модель данных (PostgreSQL)
@@ -6,13 +13,15 @@
 
 Цепочка: **План → Тренировочные дни → Упражнения в дне** (с сохранением порядка и поддержкой сплитов).
 
+
 | Таблица                      | Назначение                                                                                                                 |
 | ---------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| `workout_plans`              | План тренировок (название, владелец, активный флаг, публичный флаг для каталога, источник при копировании).                 |
+| `workout_plans`              | План тренировок (название, владелец, активный флаг, публичный флаг для каталога, источник при копировании).                |
 | `workout_plan_days`          | Дни плана (название/метка дня, порядок дня в плане).                                                                       |
 | `workout_plan_day_exercises` | Упражнение в конкретном дне: ссылка на упражнение каталога + параметры (подходы, повторения, вес) + порядок + флаг сплита. |
 
-**Каталог упражнений в БД не дублируем** — храним только `exercise_id` (string, slug из [data/examples/exercises.json](../data/examples/exercises.json)). Полное описание, медиа, инструкции фронт берёт из кешированного каталога (GET `/api/v1/exercises/data`), обновляемого по версии/ETag.
+
+**Каталог упражнений в БД не дублируем** — храним только `exercise_id` (string, slug из [data/examples/exercises.json](data/examples/exercises.json)). Полное описание, медиа, инструкции фронт берёт из кешированного каталога (GET `/api/v1/exercises/data`), обновляемого по версии/ETag.
 
 ### 1.2 DDL (ключевые поля)
 
@@ -30,7 +39,7 @@
 
 **Enum категорий плана (plan_category):** хранить в CHECK или отдельном типе. Примеры значений: `mass_gain` (набор мышечной массы), `strength` (сила), `weight_loss` (сушка/похудение), `endurance` (выносливость), `general` (общая подготовка). Список можно расширять; при добавлении новых значений — миграция с ALTER TABLE / добавлением в CHECK.
 
-**Enum уровня плана (plan_level):** совпадает с уровнем пользователя — `beginner`, `intermediate`, `advanced` (как в [internal/domain/user/user.go](../internal/domain/user/user.go) TrainingLevel).
+**Enum уровня плана (plan_level):** совпадает с уровнем пользователя — `beginner`, `intermediate`, `advanced` (как в internal/domain/user/user.go TrainingLevel).
 
 **workout_plan_days**
 
@@ -76,19 +85,22 @@
 
 ## 2. REST API Endpoints
 
-Базовый префикс: `/api/v1/plans` (все эндпоинты под middleware авторизации, как в [internal/server/server.go](../internal/server/server.go) для `/api/v1/users` и `/api/v1/exercises`).
+Базовый префикс: `/api/v1/plans` (все эндпоинты под middleware авторизации, как в [internal/server/server.go](internal/server/server.go) для `/api/v1/users` и `/api/v1/exercises`).
 
 ### 2.1 Планы
 
-| Метод  | Путь                | Описание                                                                                                                |
-| ------ | ------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| GET    | `/api/v1/plans`     | Список планов текущего пользователя (id, name, is_active, category, level, created_at; без вложенных дней).             |
-| GET    | `/api/v1/plans/:id` | Один план со вложенными днями и упражнениями в днях (полное дерево). Право: владелец или план публичный (is_public = true). |
-| POST   | `/api/v1/plans`     | Создать план (body: name, опционально is_active, is_public, category, level). Публичный план (is_public: true) может создавать только admin — иначе 403. Возврат: созданный план (без дней). |
+
+| Метод  | Путь                | Описание                                                                                                                                                                                          |
+| ------ | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET    | `/api/v1/plans`     | Список планов текущего пользователя (id, name, is_active, category, level, created_at; без вложенных дней).                                                                                       |
+| GET    | `/api/v1/plans/:id` | Один план со вложенными днями и упражнениями в днях (полное дерево). Право: владелец или план публичный (is_public = true).                                                                       |
+| POST   | `/api/v1/plans`     | Создать план (body: name, опционально is_active, is_public, category, level). Публичный план (is_public: true) может создавать только admin — иначе 403. Возврат: созданный план (без дней).      |
 | PUT    | `/api/v1/plans/:id` | Обновить план (name, is_active, is_public, category, level). При is_public: true проверка роли: только admin, иначе 403. При is_active=true снять флаг с предыдущего активного (одна транзакция). |
-| DELETE | `/api/v1/plans/:id` | Удалить план (CASCADE удалит дни и упражнения в днях). Только владелец.                                                |
+| DELETE | `/api/v1/plans/:id` | Удалить план (CASCADE удалит дни и упражнения в днях). Только владелец.                                                                                                                           |
+
 
 ### 2.2 Дни плана
+
 
 | Метод  | Путь                                | Описание                                                     |
 | ------ | ----------------------------------- | ------------------------------------------------------------ |
@@ -96,13 +108,16 @@
 | PUT    | `/api/v1/plans/:planId/days/:dayId` | Обновить день (name, sort_order).                            |
 | DELETE | `/api/v1/plans/:planId/days/:dayId` | Удалить день (и все упражнения в нём).                       |
 
+
 ### 2.3 Упражнения в дне
 
-| Метод  | Путь                                                           | Описание                                                                                                                                                                                                                     |
-| ------ | -------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+
+| Метод  | Путь                                                           | Описание                                                                                                                                                                                                                                                                                     |
+| ------ | -------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | POST   | `/api/v1/plans/:planId/days/:dayId/exercises`                  | Добавить упражнение в день (body: exercise_id, sets, reps?, weight_kg?, duration_seconds?, distance_meters?, rest_seconds?, is_superset?, sort_order?). Валидация: exercise_id в каталоге; по tracking_type — bodyweight: weight_kg null; time: duration_seconds; distance: distance_meters. |
-| PUT    | `/api/v1/plans/:planId/days/:dayId/exercises/:exerciseEntryId` | Обновить параметры (sets, reps, weight_kg, duration_seconds, distance_meters, rest_seconds, is_superset, sort_order).                                                                                                                                                                       |
-| DELETE | `/api/v1/plans/:planId/days/:dayId/exercises/:exerciseEntryId` | Удалить упражнение из дня.                                                                                                                                                                                                   |
+| PUT    | `/api/v1/plans/:planId/days/:dayId/exercises/:exerciseEntryId` | Обновить параметры (sets, reps, weight_kg, duration_seconds, distance_meters, rest_seconds, is_superset, sort_order).                                                                                                                                                                        |
+| DELETE | `/api/v1/plans/:planId/days/:dayId/exercises/:exerciseEntryId` | Удалить упражнение из дня.                                                                                                                                                                                                                                                                   |
+
 
 ### 2.4 Каталог и «забрать план»
 
@@ -204,7 +219,7 @@
 - **Handler** (например `internal/handler/plans/`) — парсинг body, вызов usecase, маппинг в DTO/JSON. Проверка владельца плана по user_id из JWT.
 - **Usecase** (например `internal/usecase/plans/`) — оркестрация: создание/обновление плана, дней, упражнений в днях; вызов репозитория и сервиса каталога для валидации.
 - **Repository** (Postgres) — CRUD по таблицам workout_plans, workout_plan_days, workout_plan_day_exercises; при необходимости — интерфейс в `internal/repository/interfaces/`.
-- **Exercises catalog** — использование существующего [internal/usecase/exercises](../internal/usecase/exercises) (или репозитория каталога): получение по exercise_id и проверка tracking_type (см. [data/examples/exercises-interfaces.go](../data/examples/exercises-interfaces.go): `TrackingType`: weight-reps, bodyweight-reps, time и т.д.).
+- **Exercises catalog** — использование существующего [internal/usecase/exercises](internal/usecase/exercises) (или репозитория каталога): получение по exercise_id и проверка tracking_type (см. [data/examples/exercises-interfaces.go](data/examples/exercises-interfaces.go): `TrackingType`: weight-reps, bodyweight-reps, time и т.д.).
 
 ### 3.2 Создание кастомного плана и целостность
 
@@ -214,7 +229,7 @@
 ### 3.3 Валидация упражнений
 
 - **Существование exercise_id:** перед сохранением в `workout_plan_day_exercises` вызывать usecase/repository каталога: «получить упражнение по id». Если не найдено — вернуть 400 Bad Request (invalid exercise_id).
-- **Тип упражнения (bodyweight, вес, время, дистанция):** по полю каталога `tracking_type`: если `bodyweight-reps` — weight_kg игнорировать или требовать null/0, в БД писать NULL. Для `weight-reps` разрешать weight_kg (nullable). Для `time` — заполнять duration_seconds, reps NULL. Для типа по дистанции — заполнять distance_meters. Список допустимых tracking_type — из каталога или [exercise-json-plan.md](exercises/exercise-json-plan.md).
+- **Тип упражнения (bodyweight, вес, время, дистанция):** по полю каталога `tracking_type`: если `bodyweight-reps` — weight_kg игнорировать или требовать null/0, в БД писать NULL. Для `weight-reps` разрешать weight_kg (nullable). Для `time` — заполнять duration_seconds, reps NULL. Для типа по дистанции — заполнять distance_meters. Список допустимых tracking_type — из каталога или docs/exercises/exercise-json-plan.md.
 
 ### 3.4 Активный план
 
@@ -234,7 +249,7 @@
 
 ## 4. Интеграция и кеширование каталога упражнений
 
-- **Бэкенд не хранит каталог в БД** — каталог остаётся в файле/embed (текущая реализация [internal/repository/file/exercises_repository.go](../internal/repository/file/exercises_repository.go)). Бэкенд только проверяет наличие exercise_id и смотрит tracking_type при создании/обновлении записей в плане.
+- **Бэкенд не хранит каталог в БД** — каталог остаётся в файле/embed (текущая реализация [internal/repository/file/exercises_repository.go](internal/repository/file/exercises_repository.go)). Бэкенд только проверяет наличие exercise_id и смотрит tracking_type при создании/обновлении записей в плане.
 - **Версия каталога:** фронт продолжает использовать GET `/api/v1/exercises/version` и GET `/api/v1/exercises/data` с If-None-Match для кеша. В планах хранятся только `exercise_id`; фронт мержит план с каталогом у себя (по id получает полное упражнение с медиа и инструкциями).
 - **Рекомендация:** не проксировать каталог через «планы» — отдельные эндпоинты exercises/version и exercises/data остаются источником правды для каталога; планы лишь ссылаются на id.
 
@@ -245,7 +260,6 @@
 - **UUID везде:** все первичные ключи планов, дней и записей «упражнение в дне» — UUID. Это позволит без конфликтов реплицировать или переносить данные в сервис аналитики и связывать «запланированное» с «фактическим» по стабильным id.
 - **Связь запланированное ↔ фактическое:** в будущей таблице «история выполнения» (например, `workout_execution_sets` или `training_log_entries`) хранить ссылку на `workout_plan_day_exercises.id` (UUID) как `plan_exercise_id` — «этот подход был выполнен по такому-то пункту плана». Так сервис аналитики сможет джойнить план (упражнение, целевые sets/reps/weight) с фактическими значениями.
 - **Не менять id при копировании плана:** при copy создаются новые UUID для плана, дней и упражнений в днях; старые id остаются привязаны к исходному плану. История, если будет привязана к `workout_plan_day_exercises.id`, остаётся консистентной (один id — один контекст плана/дня).
-- **Статус выполнения дней:** информация о том, выполнен ли тренировочный день, изолирована в сервисе аналитики. Фронт получает статусы по дням (выполнено/не выполнено, даты) через API аналитики; модуль планов не хранит и не отдаёт эту информацию.
 - Опционально: в таблицу планов/дней можно добавить `external_id` (UUID) для кросс-сервисной идентификации, если аналитика будет в отдельном хранилище — тогда один и тот же external_id может использоваться в событиях без привязки к внутреннему PK.
 
 ---
@@ -265,6 +279,8 @@ erDiagram
     workout_plan_day_exercises { uuid id uuid day_id string exercise_id int sets int reps decimal weight_kg int duration_seconds int distance_meters int rest_seconds bool is_superset int superset_group int sort_order }
 ```
 
+
+
 ---
 
 ## 7. Порядок реализации (рекомендуемый)
@@ -275,3 +291,4 @@ erDiagram
 4. Логика «активный план» (снятие флага при установке нового).
 5. Эндпоинты GET catalog (список is_public = true) и POST copy (глубокая копия с проверкой is_public). При приёме is_public в POST/PUT плана — проверка в usecase: только admin может выставлять is_public: true (иначе 403).
 6. При появлении аналитики — добавить таблицы истории с ссылкой на `workout_plan_day_exercises.id` (или external_id).
+
