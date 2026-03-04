@@ -16,6 +16,14 @@ type exercisesMeta struct {
 	} `json:"meta"`
 }
 
+// exercisesCatalogMinimal — для парсинга списка упражнений (id, tracking_type).
+type exercisesCatalogMinimal struct {
+	Exercises []struct {
+		ID           string `json:"id"`
+		TrackingType string `json:"tracking_type"`
+	} `json:"exercises"`
+}
+
 // ExercisesRepository реализует чтение каталога упражнений из файла.
 type ExercisesRepository struct {
 	filePath string
@@ -71,4 +79,34 @@ func (r *ExercisesRepository) GetData(ctx context.Context) (rawJSON []byte, vers
 		return nil, "", fmt.Errorf("parse exercises catalog meta: %w", err)
 	}
 	return data, meta.Meta.Version, nil
+}
+
+// GetExerciseByID возвращает упражнение по id (slug) из каталога.
+func (r *ExercisesRepository) GetExerciseByID(ctx context.Context, exerciseID string) (*repo.ExerciseInfo, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	data, err := os.ReadFile(r.filePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, repo.ErrExercisesNotFound
+		}
+		return nil, fmt.Errorf("read exercises catalog file: %w", err)
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	var catalog exercisesCatalogMinimal
+	if err := json.Unmarshal(data, &catalog); err != nil {
+		return nil, fmt.Errorf("parse exercises catalog: %w", err)
+	}
+	for i := range catalog.Exercises {
+		if catalog.Exercises[i].ID == exerciseID {
+			return &repo.ExerciseInfo{
+				ID:           catalog.Exercises[i].ID,
+				TrackingType: catalog.Exercises[i].TrackingType,
+			}, nil
+		}
+	}
+	return nil, repo.ErrNotFound
 }

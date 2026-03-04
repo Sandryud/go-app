@@ -20,12 +20,14 @@ import (
 	exerciseshandler "workout-app/internal/handler/exercises"
 	"workout-app/internal/handler/health"
 	"workout-app/internal/handler/middleware"
+	planshandler "workout-app/internal/handler/plans"
 	userhandler "workout-app/internal/handler/user"
 	"workout-app/internal/mailer"
 	filerepo "workout-app/internal/repository/file"
 	pgrepo "workout-app/internal/repository/postgres"
 	authuc "workout-app/internal/usecase/auth"
 	exercisesuc "workout-app/internal/usecase/exercises"
+	plansuc "workout-app/internal/usecase/plans"
 	useruc "workout-app/internal/usecase/user"
 	"workout-app/pkg/jwt"
 	"workout-app/pkg/logger"
@@ -47,6 +49,7 @@ type Server struct {
 	authHandler      *authhandler.Handler
 	userHandler      *userhandler.Handler
 	exercisesHandler *exerciseshandler.Handler
+	plansHandler     *planshandler.Handler
 }
 
 // loggerEmailSender — простая реализация EmailSender, логирующая коды в логгер.
@@ -124,6 +127,10 @@ func NewServer(cfg *config.Config, db *database.DB) *Server {
 	exercisesService := exercisesuc.NewService(exercisesRepo)
 	s.exercisesHandler = exerciseshandler.NewHandler(exercisesService, s.logger)
 
+	planRepo := pgrepo.NewPlanRepository(gormDB)
+	plansService := plansuc.NewService(planRepo, exercisesRepo)
+	s.plansHandler = planshandler.NewHandler(plansService, s.logger)
+
 	// Настраиваем middleware и роуты
 	s.setupMiddleware()
 	s.setupRoutes()
@@ -149,6 +156,7 @@ func (s *Server) setupRoutes() {
 	s.setupAuthRoutes()
 	s.setupUserRoutes()
 	s.setupExercisesRoutes()
+	s.setupPlansRoutes()
 
 	s.router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 }
@@ -231,6 +239,35 @@ func (s *Server) setupExercisesRoutes() {
 		exercisesGroup.GET("/version", s.exercisesHandler.GetVersion)
 		// GET /api/v1/exercises/data — полный каталог (JSON), поддерживает ETag и 304.
 		exercisesGroup.GET("/data", s.exercisesHandler.GetData)
+	}
+}
+
+// setupPlansRoutes настраивает эндпоинты планов тренировок (требуется авторизация).
+func (s *Server) setupPlansRoutes() {
+	v1 := s.router.Group("/api/v1")
+	plansGroup := v1.Group("/plans")
+	plansGroup.Use(middleware.Auth(s.jwtService, s.logger))
+	{
+		// GET /api/v1/plans — список планов текущего пользователя.
+		plansGroup.GET("", s.plansHandler.List)
+		// GET /api/v1/plans/:id — один план с деревом дней и упражнений.
+		plansGroup.GET("/:id", s.plansHandler.GetByID)
+		// POST /api/v1/plans — создать план.
+		plansGroup.POST("", s.plansHandler.Create)
+		// PUT /api/v1/plans/:id — обновить план.
+		plansGroup.PUT("/:id", s.plansHandler.Update)
+		// DELETE /api/v1/plans/:id — удалить план.
+		plansGroup.DELETE("/:id", s.plansHandler.Delete)
+
+		// Дни плана
+		plansGroup.POST("/:planId/days", s.plansHandler.AddDay)
+		plansGroup.PUT("/:planId/days/:dayId", s.plansHandler.UpdateDay)
+		plansGroup.DELETE("/:planId/days/:dayId", s.plansHandler.DeleteDay)
+
+		// Упражнения в дне
+		plansGroup.POST("/:planId/days/:dayId/exercises", s.plansHandler.AddExerciseToDay)
+		plansGroup.PUT("/:planId/days/:dayId/exercises/:exerciseEntryId", s.plansHandler.UpdateExerciseInDay)
+		plansGroup.DELETE("/:planId/days/:dayId/exercises/:exerciseEntryId", s.plansHandler.DeleteExerciseFromDay)
 	}
 }
 

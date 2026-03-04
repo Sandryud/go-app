@@ -17,8 +17,10 @@ go-app/
 │   └── database/            # Database initialization and migrations
 ├── pkg/                     # Reusable packages
 ├── api/                     # API specification
+├── docs/                    # API docs
 ├── scripts/                 # Helper scripts
 └── tests/                   # Tests
+
 ```
 
 ## Architecture
