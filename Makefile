@@ -44,6 +44,10 @@ migrate-steps: ## Применить/откатить N миграций (исп
 	@echo "Применение $(STEPS) миграций..."
 	@go run ./cmd/migrate -steps $(STEPS)
 
+migrate-fix-dirty-0: ## Снять dirty при version=0 (обход ошибки «read down for version 0»), затем make migrate-up
+	@echo "Снятие dirty для version=0..."
+	@go run ./cmd/migrate -fix-dirty-0
+
 tidy: ## Очистить go модули
 	@go mod tidy
 

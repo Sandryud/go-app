@@ -18,6 +18,8 @@ func main() {
 		down    = flag.Bool("down", false, "Откатить последнюю миграцию")
 		steps   = flag.String("steps", "", "Применить/откатить N миграций (положительное число - вверх, отрицательное - вниз)")
 		version = flag.Bool("version", false, "Показать текущую версию миграции")
+		force      = flag.String("force", "", "Принудительно установить версию без выполнения миграций (например 0), для снятия dirty")
+		fixDirty0  = flag.Bool("fix-dirty-0", false, "SQL: снять dirty при version=0 (обход ошибки «read down for version 0»), затем запустите -up")
 	)
 
 	flag.Usage = func() {
@@ -31,6 +33,8 @@ func main() {
 		fmt.Fprintf(os.Stderr, "  %s -steps 2     # Применить 2 миграции\n", os.Args[0])
 		fmt.Fprintf(os.Stderr, "  %s -steps -1    # Откатить 1 миграцию\n", os.Args[0])
 		fmt.Fprintf(os.Stderr, "  %s -version     # Показать текущую версию\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "  %s -force 0     # Снять dirty, установить версию 0 (после ошибки миграции)\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "  %s -fix-dirty-0 # SQL: снять dirty при version=0, затем -up\n", os.Args[0])
 	}
 
 	flag.Parse()
@@ -79,6 +83,12 @@ func main() {
 	if *version {
 		actionCount++
 	}
+	if *force != "" {
+		actionCount++
+	}
+	if *fixDirty0 {
+		actionCount++
+	}
 
 	// Если не указано действие, по умолчанию применяем все миграции
 	if actionCount == 0 {
@@ -95,6 +105,10 @@ func main() {
 		handleDown(migrator)
 	case *steps != "":
 		handleSteps(migrator, *steps)
+	case *force != "":
+		handleForce(migrator, *force)
+	case *fixDirty0:
+		handleFixDirty0(db)
 	case *up:
 		handleUp(migrator)
 	}
@@ -102,6 +116,17 @@ func main() {
 
 // handleUp применяет все доступные миграции
 func handleUp(migrator *database.Migrator) {
+	dirty, err := migrator.CheckDirty()
+	if err != nil {
+		log.Fatalf("Ошибка проверки состояния миграций: %v", err)
+	}
+	if dirty {
+		ver, _, _ := migrator.Version()
+		log.Fatalf(
+			"База в состоянии dirty (версия %d). Сначала выполните: %s -force %d , затем снова -up.",
+			ver, os.Args[0], ver,
+		)
+	}
 	log.Println("Применение всех доступных миграций...")
 	if err := migrator.Up(); err != nil {
 		if err == database.ErrNoChange {
@@ -154,6 +179,35 @@ func handleSteps(migrator *database.Migrator, stepsStr string) {
 		}
 		log.Fatalf("Ошибка применения миграций: %v", err)
 	}
+}
+
+// handleFixDirty0 выполняет SQL: удаляет запись с version=0 из schema_migrations (обход ошибки «read down for version 0»).
+// Пустая таблица трактуется как «миграции не применялись», тогда -up применит все миграции с 1.
+func handleFixDirty0(db *database.DB) {
+	log.Println("Очистка version=0 в schema_migrations (DELETE)...")
+	res := db.Exec("DELETE FROM schema_migrations WHERE version = 0")
+	if res.Error != nil {
+		log.Fatalf("Ошибка очистки: %v", res.Error)
+	}
+	if res.RowsAffected == 0 {
+		log.Println("Затронуто 0 строк (таблица уже без version=0). Запустите -up.")
+	} else {
+		log.Printf("Удалено строк: %d. Запустите -up для применения миграций.", res.RowsAffected)
+	}
+}
+
+// handleForce принудительно устанавливает версию миграции без выполнения миграций.
+// Используется для восстановления после dirty (например: -force 0, затем -up).
+func handleForce(migrator *database.Migrator, forceStr string) {
+	version, err := strconv.Atoi(forceStr)
+	if err != nil {
+		log.Fatalf("Ошибка: неверный формат версии для -force (ожидается число): %v", err)
+	}
+	log.Printf("Принудительная установка версии миграции на %d...", version)
+	if err := migrator.Force(version); err != nil {
+		log.Fatalf("Ошибка принудительной установки версии: %v", err)
+	}
+	log.Println("Версия установлена. Запустите -up для применения миграций.")
 }
 
 // handleVersion показывает текущую версию миграции
