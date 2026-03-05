@@ -91,13 +91,13 @@ type PlanUpdatedResponse struct {
 	UpdatedAt string  `json:"updated_at"`
 }
 
-// CreateDayRequest — тело запроса POST /api/v1/plans/:planId/days.
+// CreateDayRequest — тело запроса POST /api/v1/plans/:id/days.
 type CreateDayRequest struct {
 	Name      string `json:"name" binding:"required,max=200"`
 	SortOrder *int   `json:"sort_order,omitempty"`
 }
 
-// UpdateDayRequest — тело запроса PUT /api/v1/plans/:planId/days/:dayId.
+// UpdateDayRequest — тело запроса PUT /api/v1/plans/:id/days/:dayId.
 type UpdateDayRequest struct {
 	Name      *string `json:"name,omitempty" binding:"omitempty,max=200"`
 	SortOrder *int   `json:"sort_order,omitempty"`
@@ -113,7 +113,7 @@ type DayResponse struct {
 	UpdatedAt string `json:"updated_at"`
 }
 
-// CreateDayExerciseRequest — тело запроса POST /api/v1/plans/:planId/days/:dayId/exercises.
+// CreateDayExerciseRequest — тело запроса POST /api/v1/plans/:id/days/:dayId/exercises.
 type CreateDayExerciseRequest struct {
 	ExerciseID      string   `json:"exercise_id" binding:"required,max=100"`
 	Sets            int      `json:"sets" binding:"required,min=1,max=20"`

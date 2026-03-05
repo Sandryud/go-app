@@ -259,15 +259,15 @@ func (s *Server) setupPlansRoutes() {
 		// DELETE /api/v1/plans/:id — удалить план.
 		plansGroup.DELETE("/:id", s.plansHandler.Delete)
 
-		// Дни плана
-		plansGroup.POST("/:planId/days", s.plansHandler.AddDay)
-		plansGroup.PUT("/:planId/days/:dayId", s.plansHandler.UpdateDay)
-		plansGroup.DELETE("/:planId/days/:dayId", s.plansHandler.DeleteDay)
+		// Дни плана (идент. плана — :id, как в GET/PUT/DELETE плана)
+		plansGroup.POST("/:id/days", s.plansHandler.AddDay)
+		plansGroup.PUT("/:id/days/:dayId", s.plansHandler.UpdateDay)
+		plansGroup.DELETE("/:id/days/:dayId", s.plansHandler.DeleteDay)
 
 		// Упражнения в дне
-		plansGroup.POST("/:planId/days/:dayId/exercises", s.plansHandler.AddExerciseToDay)
-		plansGroup.PUT("/:planId/days/:dayId/exercises/:exerciseEntryId", s.plansHandler.UpdateExerciseInDay)
-		plansGroup.DELETE("/:planId/days/:dayId/exercises/:exerciseEntryId", s.plansHandler.DeleteExerciseFromDay)
+		plansGroup.POST("/:id/days/:dayId/exercises", s.plansHandler.AddExerciseToDay)
+		plansGroup.PUT("/:id/days/:dayId/exercises/:exerciseEntryId", s.plansHandler.UpdateExerciseInDay)
+		plansGroup.DELETE("/:id/days/:dayId/exercises/:exerciseEntryId", s.plansHandler.DeleteExerciseFromDay)
 	}
 }
 

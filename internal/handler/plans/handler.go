@@ -479,7 +479,7 @@ func toDayExerciseResponse(ex *plandomain.PlanDayExercise) DayExerciseResponse {
 }
 
 func parsePlanDayIDs(c *gin.Context) (planID, dayID uuid.UUID, ok bool) {
-	planID, err := uuid.Parse(c.Param("planId"))
+	planID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		response.Error(c, http.StatusBadRequest, "invalid_request", "Некорректный формат ID плана", nil)
 		return uuid.Nil, uuid.Nil, false
@@ -499,22 +499,22 @@ func parsePlanDayIDs(c *gin.Context) (planID, dayID uuid.UUID, ok bool) {
 // @Security     BearerAuth
 // @Accept       json
 // @Produce      json
-// @Param        planId  path      string  true  "ID плана (UUID)"
-// @Param        payload body      CreateDayRequest  true  "Данные дня"
-// @Success      201     {object}  DayResponse
-// @Failure      400     {object}  response.ErrorBody
-// @Failure      401     {object}  response.ErrorBody
-// @Failure      403     {object}  response.ErrorBody
-// @Failure      404     {object}  response.ErrorBody
-// @Failure      500     {object}  response.ErrorBody
-// @Router       /api/v1/plans/{planId}/days [post]
+// @Param        id       path      string  true  "ID плана (UUID)"
+// @Param        payload  body      CreateDayRequest  true  "Данные дня"
+// @Success      201      {object}  DayResponse
+// @Failure      400      {object}  response.ErrorBody
+// @Failure      401      {object}  response.ErrorBody
+// @Failure      403      {object}  response.ErrorBody
+// @Failure      404      {object}  response.ErrorBody
+// @Failure      500      {object}  response.ErrorBody
+// @Router       /api/v1/plans/{id}/days [post]
 func (h *Handler) AddDay(c *gin.Context) {
 	userID, err := getUserIDFromContext(c)
 	if err != nil {
 		response.Error(c, http.StatusUnauthorized, "unauthorized", "Требуется аутентификация", nil)
 		return
 	}
-	planID, err := uuid.Parse(c.Param("planId"))
+	planID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		response.Error(c, http.StatusBadRequest, "invalid_request", "Некорректный формат ID плана", nil)
 		return
@@ -553,16 +553,16 @@ func (h *Handler) AddDay(c *gin.Context) {
 // @Security     BearerAuth
 // @Accept       json
 // @Produce      json
-// @Param        planId  path      string  true  "ID плана (UUID)"
-// @Param        dayId   path      string  true  "ID дня (UUID)"
-// @Param        payload body      UpdateDayRequest  true  "Данные для обновления"
-// @Success      200     {object}  DayResponse
-// @Failure      400     {object}  response.ErrorBody
-// @Failure      401     {object}  response.ErrorBody
-// @Failure      403     {object}  response.ErrorBody
-// @Failure      404     {object}  response.ErrorBody
-// @Failure      500     {object}  response.ErrorBody
-// @Router       /api/v1/plans/{planId}/days/{dayId} [put]
+// @Param        id       path      string  true  "ID плана (UUID)"
+// @Param        dayId    path      string  true  "ID дня (UUID)"
+// @Param        payload  body      UpdateDayRequest  true  "Данные для обновления"
+// @Success      200      {object}  DayResponse
+// @Failure      400      {object}  response.ErrorBody
+// @Failure      401      {object}  response.ErrorBody
+// @Failure      403      {object}  response.ErrorBody
+// @Failure      404      {object}  response.ErrorBody
+// @Failure      500      {object}  response.ErrorBody
+// @Router       /api/v1/plans/{id}/days/{dayId} [put]
 func (h *Handler) UpdateDay(c *gin.Context) {
 	userID, err := getUserIDFromContext(c)
 	if err != nil {
@@ -605,14 +605,14 @@ func (h *Handler) UpdateDay(c *gin.Context) {
 // @Description  Удаляет день и все упражнения в нём. Только владелец плана.
 // @Tags         plans
 // @Security     BearerAuth
-// @Param        planId  path  string  true  "ID плана (UUID)"
-// @Param        dayId   path  string  true  "ID дня (UUID)"
-// @Success      204     "No Content"
-// @Failure      401     {object}  response.ErrorBody
-// @Failure      403     {object}  response.ErrorBody
-// @Failure      404     {object}  response.ErrorBody
-// @Failure      500     {object}  response.ErrorBody
-// @Router       /api/v1/plans/{planId}/days/{dayId} [delete]
+// @Param        id     path  string  true  "ID плана (UUID)"
+// @Param        dayId  path  string  true  "ID дня (UUID)"
+// @Success      204    "No Content"
+// @Failure      401    {object}  response.ErrorBody
+// @Failure      403    {object}  response.ErrorBody
+// @Failure      404    {object}  response.ErrorBody
+// @Failure      500    {object}  response.ErrorBody
+// @Router       /api/v1/plans/{id}/days/{dayId} [delete]
 func (h *Handler) DeleteDay(c *gin.Context) {
 	userID, err := getUserIDFromContext(c)
 	if err != nil {
@@ -651,7 +651,7 @@ func (h *Handler) DeleteDay(c *gin.Context) {
 // @Security     BearerAuth
 // @Accept       json
 // @Produce      json
-// @Param        planId   path      string  true  "ID плана (UUID)"
+// @Param        id       path      string  true  "ID плана (UUID)"
 // @Param        dayId    path      string  true  "ID дня (UUID)"
 // @Param        payload  body      CreateDayExerciseRequest  true  "Данные упражнения"
 // @Success      201      {object}  DayExerciseResponse
@@ -660,7 +660,7 @@ func (h *Handler) DeleteDay(c *gin.Context) {
 // @Failure      403      {object}  response.ErrorBody
 // @Failure      404      {object}  response.ErrorBody
 // @Failure      500      {object}  response.ErrorBody
-// @Router       /api/v1/plans/{planId}/days/{dayId}/exercises [post]
+// @Router       /api/v1/plans/{id}/days/{dayId}/exercises [post]
 func (h *Handler) AddExerciseToDay(c *gin.Context) {
 	userID, err := getUserIDFromContext(c)
 	if err != nil {
@@ -723,7 +723,7 @@ func (h *Handler) AddExerciseToDay(c *gin.Context) {
 // @Security     BearerAuth
 // @Accept       json
 // @Produce      json
-// @Param        planId            path  string  true  "ID плана (UUID)"
+// @Param        id                path  string  true  "ID плана (UUID)"
 // @Param        dayId             path  string  true  "ID дня (UUID)"
 // @Param        exerciseEntryId  path  string  true  "ID записи упражнения в дне (UUID)"
 // @Param        payload           body  UpdateDayExerciseRequest  true  "Данные для обновления"
@@ -733,7 +733,7 @@ func (h *Handler) AddExerciseToDay(c *gin.Context) {
 // @Failure      403               {object}  response.ErrorBody
 // @Failure      404               {object}  response.ErrorBody
 // @Failure      500               {object}  response.ErrorBody
-// @Router       /api/v1/plans/{planId}/days/{dayId}/exercises/{exerciseEntryId} [put]
+// @Router       /api/v1/plans/{id}/days/{dayId}/exercises/{exerciseEntryId} [put]
 func (h *Handler) UpdateExerciseInDay(c *gin.Context) {
 	userID, err := getUserIDFromContext(c)
 	if err != nil {
@@ -794,15 +794,15 @@ func (h *Handler) UpdateExerciseInDay(c *gin.Context) {
 // @Description  Удаляет запись упражнения из дня плана.
 // @Tags         plans
 // @Security     BearerAuth
-// @Param        planId            path  string  true  "ID плана (UUID)"
-// @Param        dayId             path  string  true  "ID дня (UUID)"
+// @Param        id               path  string  true  "ID плана (UUID)"
+// @Param        dayId            path  string  true  "ID дня (UUID)"
 // @Param        exerciseEntryId  path  string  true  "ID записи упражнения в дне (UUID)"
 // @Success      204  "No Content"
 // @Failure      401  {object}  response.ErrorBody
 // @Failure      403  {object}  response.ErrorBody
 // @Failure      404  {object}  response.ErrorBody
 // @Failure      500  {object}  response.ErrorBody
-// @Router       /api/v1/plans/{planId}/days/{dayId}/exercises/{exerciseEntryId} [delete]
+// @Router       /api/v1/plans/{id}/days/{dayId}/exercises/{exerciseEntryId} [delete]
 func (h *Handler) DeleteExerciseFromDay(c *gin.Context) {
 	userID, err := getUserIDFromContext(c)
 	if err != nil {

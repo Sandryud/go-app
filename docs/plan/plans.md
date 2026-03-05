@@ -269,7 +269,7 @@ internal/
 
 Все операции с днями требуют, чтобы план принадлежал текущему пользователю (иначе 403 или 404).
 
-#### POST /api/v1/plans/:planId/days
+#### POST /api/v1/plans/:id/days
 
 Добавить день в план.
 
@@ -286,11 +286,11 @@ internal/
 
 ---
 
-#### PUT /api/v1/plans/:planId/days/:dayId
+#### PUT /api/v1/plans/:id/days/:dayId
 
 Обновить день (name, sort_order). Оба поля в теле опциональны.
 
-**Параметры пути:** `planId` — UUID плана, `dayId` — UUID дня.
+**Параметры пути:** `id` — UUID плана, `dayId` — UUID дня.
 
 **Ответ:** `200 OK` — объект дня (id, plan_id, name, sort_order, created_at, updated_at).
 
@@ -298,7 +298,7 @@ internal/
 
 ---
 
-#### DELETE /api/v1/plans/:planId/days/:dayId
+#### DELETE /api/v1/plans/:id/days/:dayId
 
 Удалить день. Каскадно удаляются все записи упражнений в этом дне.
 
@@ -312,7 +312,7 @@ internal/
 
 Операции с упражнениями в дне требуют владения планом и принадлежности дня этому плану. При добавлении упражнения выполняется проверка: `exercise_id` должен существовать в каталоге упражнений (GET `/api/v1/exercises/data`); поля нормализуются по `tracking_type` каталога (например, для bodyweight обнуляется weight_kg).
 
-#### POST /api/v1/plans/:planId/days/:dayId/exercises
+#### POST /api/v1/plans/:id/days/:dayId/exercises
 
 Добавить упражнение в день.
 
@@ -336,11 +336,11 @@ internal/
 
 ---
 
-#### PUT /api/v1/plans/:planId/days/:dayId/exercises/:exerciseEntryId
+#### PUT /api/v1/plans/:id/days/:dayId/exercises/:exerciseEntryId
 
 Обновить параметры записи упражнения в дне. Все поля в теле опциональны.
 
-**Параметры пути:** `planId`, `dayId`, `exerciseEntryId` — UUID.
+**Параметры пути:** `id` (план), `dayId`, `exerciseEntryId` — UUID.
 
 **Тело запроса (JSON):** sets (1–20), reps, weight_kg, duration_seconds, distance_meters, rest_seconds, is_superset, sort_order — все опциональны.
 
@@ -350,7 +350,7 @@ internal/
 
 ---
 
-#### DELETE /api/v1/plans/:planId/days/:dayId/exercises/:exerciseEntryId
+#### DELETE /api/v1/plans/:id/days/:dayId/exercises/:exerciseEntryId
 
 Удалить запись упражнения из дня.
 
