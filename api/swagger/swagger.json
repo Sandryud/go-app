@@ -374,7 +374,12 @@
         },
         "/api/v1/exercises/data": {
             "get": {
-                "description": "Возвращает полный файл exercises.json. Поддерживает ETag: при заголовке If-None-Match, совпадающем с текущей версией, возвращается 304 Not Modified.",
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Возвращает полный файл exercises.json. Поддерживает ETag: при заголовке If-None-Match, совпадающем с текущей версией, возвращается 304 Not Modified. Требуется авторизация.",
                 "produces": [
                     "application/json"
                 ],
@@ -403,6 +408,12 @@
                             "type": "string"
                         }
                     },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/workout-app_internal_handler_response.ErrorBody"
+                        }
+                    },
                     "404": {
                         "description": "Файл каталога не найден",
                         "schema": {
@@ -420,7 +431,12 @@
         },
         "/api/v1/exercises/version": {
             "get": {
-                "description": "Возвращает текущую версию каталога (meta.version из exercises.json).",
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Возвращает текущую версию каталога (meta.version из exercises.json). Требуется авторизация.",
                 "produces": [
                     "application/json"
                 ],
@@ -433,6 +449,748 @@
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/internal_handler_exercises.VersionResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/workout-app_internal_handler_response.ErrorBody"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workout-app_internal_handler_response.ErrorBody"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/plans": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Возвращает планы текущего пользователя (id, name, is_active, category, level, created_at) без вложенных дней.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "plans"
+                ],
+                "summary": "Список планов текущего пользователя",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/internal_handler_plans.PlanListItemResponse"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/workout-app_internal_handler_response.ErrorBody"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workout-app_internal_handler_response.ErrorBody"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Создаёт новый план. Публичный план (is_public: true) может создавать только admin — иначе 403. category и level при указании должны быть из допустимых значений.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "plans"
+                ],
+                "summary": "Создать план",
+                "parameters": [
+                    {
+                        "description": "Данные плана",
+                        "name": "payload",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler_plans.CreatePlanRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler_plans.PlanCreatedResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Некорректное тело запроса, недопустимая category или level",
+                        "schema": {
+                            "$ref": "#/definitions/workout-app_internal_handler_response.ErrorBody"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/workout-app_internal_handler_response.ErrorBody"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/workout-app_internal_handler_response.ErrorBody"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workout-app_internal_handler_response.ErrorBody"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/plans/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Возвращает один план со вложенными днями и упражнениями в днях. Доступ: владелец или план публичный (is_public = true).",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "plans"
+                ],
+                "summary": "Получить план по ID",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "ID плана (UUID)",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler_plans.PlanDetailResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/workout-app_internal_handler_response.ErrorBody"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/workout-app_internal_handler_response.ErrorBody"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/workout-app_internal_handler_response.ErrorBody"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workout-app_internal_handler_response.ErrorBody"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Обновляет план. При is_public: true — только admin. При is_active: true снимает флаг с предыдущего активного плана. category и level при указании должны быть из допустимых значений.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "plans"
+                ],
+                "summary": "Обновить план",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "ID плана (UUID)",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Данные для обновления",
+                        "name": "payload",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler_plans.UpdatePlanRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler_plans.PlanUpdatedResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Некорректное тело запроса, недопустимая category или level",
+                        "schema": {
+                            "$ref": "#/definitions/workout-app_internal_handler_response.ErrorBody"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/workout-app_internal_handler_response.ErrorBody"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/workout-app_internal_handler_response.ErrorBody"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/workout-app_internal_handler_response.ErrorBody"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workout-app_internal_handler_response.ErrorBody"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Удаляет план (CASCADE удалит дни и упражнения в днях). Только владелец.",
+                "tags": [
+                    "plans"
+                ],
+                "summary": "Удалить план",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "ID плана (UUID)",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/workout-app_internal_handler_response.ErrorBody"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/workout-app_internal_handler_response.ErrorBody"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/workout-app_internal_handler_response.ErrorBody"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workout-app_internal_handler_response.ErrorBody"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/plans/{id}/days": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Добавляет день в план (name, sort_order?). Только владелец плана.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "plans"
+                ],
+                "summary": "Добавить день в план",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "ID плана (UUID)",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Данные дня",
+                        "name": "payload",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler_plans.CreateDayRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler_plans.DayResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/workout-app_internal_handler_response.ErrorBody"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/workout-app_internal_handler_response.ErrorBody"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/workout-app_internal_handler_response.ErrorBody"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/workout-app_internal_handler_response.ErrorBody"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workout-app_internal_handler_response.ErrorBody"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/plans/{id}/days/{dayId}": {
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Обновляет день (name, sort_order). Только владелец плана.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "plans"
+                ],
+                "summary": "Обновить день плана",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "ID плана (UUID)",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "ID дня (UUID)",
+                        "name": "dayId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Данные для обновления",
+                        "name": "payload",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler_plans.UpdateDayRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler_plans.DayResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/workout-app_internal_handler_response.ErrorBody"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/workout-app_internal_handler_response.ErrorBody"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/workout-app_internal_handler_response.ErrorBody"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/workout-app_internal_handler_response.ErrorBody"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workout-app_internal_handler_response.ErrorBody"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Удаляет день и все упражнения в нём. Только владелец плана.",
+                "tags": [
+                    "plans"
+                ],
+                "summary": "Удалить день из плана",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "ID плана (UUID)",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "ID дня (UUID)",
+                        "name": "dayId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/workout-app_internal_handler_response.ErrorBody"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/workout-app_internal_handler_response.ErrorBody"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/workout-app_internal_handler_response.ErrorBody"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workout-app_internal_handler_response.ErrorBody"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/plans/{id}/days/{dayId}/exercises": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Добавляет упражнение в день. exercise_id должен быть из каталога. Валидация по tracking_type. sets: 1–20.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "plans"
+                ],
+                "summary": "Добавить упражнение в день",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "ID плана (UUID)",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "ID дня (UUID)",
+                        "name": "dayId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Данные упражнения",
+                        "name": "payload",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler_plans.CreateDayExerciseRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler_plans.DayExerciseResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "invalid_exercise_id или invalid_sets (sets не 1–20)",
+                        "schema": {
+                            "$ref": "#/definitions/workout-app_internal_handler_response.ErrorBody"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/workout-app_internal_handler_response.ErrorBody"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/workout-app_internal_handler_response.ErrorBody"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/workout-app_internal_handler_response.ErrorBody"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workout-app_internal_handler_response.ErrorBody"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/plans/{id}/days/{dayId}/exercises/{exerciseEntryId}": {
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Обновляет параметры записи упражнения в дне (sets, reps, weight_kg и т.д.). sets при указании: 1–20.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "plans"
+                ],
+                "summary": "Обновить упражнение в дне",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "ID плана (UUID)",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "ID дня (UUID)",
+                        "name": "dayId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "ID записи упражнения в дне (UUID)",
+                        "name": "exerciseEntryId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Данные для обновления",
+                        "name": "payload",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler_plans.UpdateDayExerciseRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler_plans.DayExerciseResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "invalid_sets (sets не 1–20)",
+                        "schema": {
+                            "$ref": "#/definitions/workout-app_internal_handler_response.ErrorBody"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/workout-app_internal_handler_response.ErrorBody"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/workout-app_internal_handler_response.ErrorBody"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/workout-app_internal_handler_response.ErrorBody"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workout-app_internal_handler_response.ErrorBody"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Удаляет запись упражнения из дня плана.",
+                "tags": [
+                    "plans"
+                ],
+                "summary": "Удалить упражнение из дня",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "ID плана (UUID)",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "ID дня (UUID)",
+                        "name": "dayId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "ID записи упражнения в дне (UUID)",
+                        "name": "exerciseEntryId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/workout-app_internal_handler_response.ErrorBody"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/workout-app_internal_handler_response.ErrorBody"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/workout-app_internal_handler_response.ErrorBody"
                         }
                     },
                     "500": {
@@ -958,6 +1716,413 @@
             "properties": {
                 "version": {
                     "type": "string"
+                }
+            }
+        },
+        "internal_handler_plans.CreateDayExerciseRequest": {
+            "type": "object",
+            "required": [
+                "exercise_id",
+                "sets"
+            ],
+            "properties": {
+                "distance_meters": {
+                    "type": "integer"
+                },
+                "duration_seconds": {
+                    "type": "integer"
+                },
+                "exercise_id": {
+                    "type": "string",
+                    "maxLength": 100
+                },
+                "is_superset": {
+                    "type": "boolean"
+                },
+                "reps": {
+                    "type": "integer"
+                },
+                "rest_seconds": {
+                    "type": "integer"
+                },
+                "sets": {
+                    "type": "integer",
+                    "maximum": 20,
+                    "minimum": 1
+                },
+                "sort_order": {
+                    "type": "integer"
+                },
+                "weight_kg": {
+                    "type": "number"
+                }
+            }
+        },
+        "internal_handler_plans.CreateDayRequest": {
+            "type": "object",
+            "required": [
+                "name"
+            ],
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "maxLength": 200
+                },
+                "sort_order": {
+                    "type": "integer"
+                }
+            }
+        },
+        "internal_handler_plans.CreatePlanRequest": {
+            "type": "object",
+            "required": [
+                "name"
+            ],
+            "properties": {
+                "category": {
+                    "type": "string",
+                    "enum": [
+                        "mass_gain",
+                        "strength",
+                        "weight_loss",
+                        "endurance",
+                        "general"
+                    ]
+                },
+                "is_active": {
+                    "type": "boolean"
+                },
+                "is_public": {
+                    "type": "boolean"
+                },
+                "level": {
+                    "type": "string",
+                    "enum": [
+                        "beginner",
+                        "intermediate",
+                        "advanced"
+                    ]
+                },
+                "name": {
+                    "type": "string",
+                    "maxLength": 200
+                }
+            }
+        },
+        "internal_handler_plans.DayExerciseResponse": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "day_id": {
+                    "type": "string"
+                },
+                "distance_meters": {
+                    "type": "integer"
+                },
+                "duration_seconds": {
+                    "type": "integer"
+                },
+                "exercise_id": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "is_superset": {
+                    "type": "boolean"
+                },
+                "reps": {
+                    "type": "integer"
+                },
+                "rest_seconds": {
+                    "type": "integer"
+                },
+                "sets": {
+                    "type": "integer"
+                },
+                "sort_order": {
+                    "type": "integer"
+                },
+                "superset_group": {
+                    "type": "integer"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "weight_kg": {
+                    "type": "number"
+                }
+            }
+        },
+        "internal_handler_plans.DayResponse": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "plan_id": {
+                    "type": "string"
+                },
+                "sort_order": {
+                    "type": "integer"
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_handler_plans.PlanCreatedResponse": {
+            "type": "object",
+            "properties": {
+                "category": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "is_active": {
+                    "type": "boolean"
+                },
+                "is_public": {
+                    "type": "boolean"
+                },
+                "level": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "user_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_handler_plans.PlanDayDetailResponse": {
+            "type": "object",
+            "properties": {
+                "exercises": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_handler_plans.PlanDayExerciseItemResponse"
+                    }
+                },
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "sort_order": {
+                    "type": "integer"
+                }
+            }
+        },
+        "internal_handler_plans.PlanDayExerciseItemResponse": {
+            "type": "object",
+            "properties": {
+                "distance_meters": {
+                    "type": "integer"
+                },
+                "duration_seconds": {
+                    "type": "integer"
+                },
+                "exercise_id": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "is_superset": {
+                    "type": "boolean"
+                },
+                "reps": {
+                    "type": "integer"
+                },
+                "rest_seconds": {
+                    "type": "integer"
+                },
+                "sets": {
+                    "type": "integer"
+                },
+                "sort_order": {
+                    "type": "integer"
+                },
+                "superset_group": {
+                    "type": "integer"
+                },
+                "weight_kg": {
+                    "type": "number"
+                }
+            }
+        },
+        "internal_handler_plans.PlanDetailResponse": {
+            "type": "object",
+            "properties": {
+                "category": {
+                    "type": "string"
+                },
+                "days": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_handler_plans.PlanDayDetailResponse"
+                    }
+                },
+                "id": {
+                    "type": "string"
+                },
+                "is_active": {
+                    "type": "boolean"
+                },
+                "level": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_handler_plans.PlanListItemResponse": {
+            "type": "object",
+            "properties": {
+                "category": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "is_active": {
+                    "type": "boolean"
+                },
+                "level": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_handler_plans.PlanUpdatedResponse": {
+            "type": "object",
+            "properties": {
+                "category": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "is_active": {
+                    "type": "boolean"
+                },
+                "is_public": {
+                    "type": "boolean"
+                },
+                "level": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "user_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_handler_plans.UpdateDayExerciseRequest": {
+            "type": "object",
+            "properties": {
+                "distance_meters": {
+                    "type": "integer"
+                },
+                "duration_seconds": {
+                    "type": "integer"
+                },
+                "is_superset": {
+                    "type": "boolean"
+                },
+                "reps": {
+                    "type": "integer"
+                },
+                "rest_seconds": {
+                    "type": "integer"
+                },
+                "sets": {
+                    "type": "integer",
+                    "maximum": 20,
+                    "minimum": 1
+                },
+                "sort_order": {
+                    "type": "integer"
+                },
+                "weight_kg": {
+                    "type": "number"
+                }
+            }
+        },
+        "internal_handler_plans.UpdateDayRequest": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "maxLength": 200
+                },
+                "sort_order": {
+                    "type": "integer"
+                }
+            }
+        },
+        "internal_handler_plans.UpdatePlanRequest": {
+            "type": "object",
+            "properties": {
+                "category": {
+                    "type": "string",
+                    "enum": [
+                        "mass_gain",
+                        "strength",
+                        "weight_loss",
+                        "endurance",
+                        "general"
+                    ]
+                },
+                "is_active": {
+                    "type": "boolean"
+                },
+                "is_public": {
+                    "type": "boolean"
+                },
+                "level": {
+                    "type": "string",
+                    "enum": [
+                        "beginner",
+                        "intermediate",
+                        "advanced"
+                    ]
+                },
+                "name": {
+                    "type": "string",
+                    "maxLength": 200
                 }
             }
         },
