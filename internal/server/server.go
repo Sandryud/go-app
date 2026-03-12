@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	ginjson "github.com/gin-gonic/gin/codec/json"
 
 	_ "workout-app/api/swagger" // docs
 	"workout-app/internal/config"
@@ -30,6 +31,7 @@ import (
 	plansuc "workout-app/internal/usecase/plans"
 	useruc "workout-app/internal/usecase/user"
 	"workout-app/pkg/jwt"
+	"workout-app/pkg/jsoncodec"
 	"workout-app/pkg/logger"
 	mailerpkg "workout-app/pkg/mailer"
 
@@ -68,6 +70,9 @@ func (s *loggerEmailSender) SendEmailVerificationCode(ctx context.Context, email
 
 // NewServer создает новый экземпляр сервера
 func NewServer(cfg *config.Config, db *database.DB) *Server {
+	// JSON-ответы отдаются в camelCase через кастомный codec
+	ginjson.API = jsoncodec.NewCamelCodec()
+
 	// Устанавливаем режим Gin в зависимости от окружения
 	if cfg.AppEnv == "production" {
 		gin.SetMode(gin.ReleaseMode)
