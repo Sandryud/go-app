@@ -478,6 +478,14 @@ func toDayExerciseResponse(ex *plandomain.PlanDayExercise) DayExerciseResponse {
 	}
 }
 
+func toDayExerciseResponses(list []*plandomain.PlanDayExercise) []DayExerciseResponse {
+	out := make([]DayExerciseResponse, 0, len(list))
+	for _, ex := range list {
+		out = append(out, toDayExerciseResponse(ex))
+	}
+	return out
+}
+
 func parsePlanDayIDs(c *gin.Context) (planID, dayID uuid.UUID, ok bool) {
 	planID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
@@ -645,17 +653,17 @@ func (h *Handler) DeleteDay(c *gin.Context) {
 }
 
 // AddExerciseToDay godoc
-// @Summary      Добавить упражнение в день
-// @Description  Добавляет упражнение в день. exercise_id должен быть из каталога. Валидация по tracking_type. sets: 1–20.
+// @Summary      Добавить упражнения в день
+// @Description  Добавляет массив упражнений в день. Тело — JSON-массив объектов. Валидация по каждому элементу; при любой ошибке — 400 с details (index, code, message). exercise_id из каталога, sets: 1–20.
 // @Tags         plans
 // @Security     BearerAuth
 // @Accept       json
 // @Produce      json
 // @Param        id       path      string  true  "ID плана (UUID)"
 // @Param        dayId    path      string  true  "ID дня (UUID)"
-// @Param        payload  body      CreateDayExerciseRequest  true  "Данные упражнения"
-// @Success      201      {object}  DayExerciseResponse
-// @Failure      400      {object}  response.ErrorBody  "invalid_exercise_id или invalid_sets (sets не 1–20)"
+// @Param        payload  body      []CreateDayExerciseRequest  true  "Массив упражнений"
+// @Success      201      {array}   DayExerciseResponse
+// @Failure      400      {object}  response.ErrorBody  "invalid_request или validation_error (details — массив ошибок по индексу)"
 // @Failure      401      {object}  response.ErrorBody
 // @Failure      403      {object}  response.ErrorBody
 // @Failure      404      {object}  response.ErrorBody
@@ -671,23 +679,30 @@ func (h *Handler) AddExerciseToDay(c *gin.Context) {
 	if !ok {
 		return
 	}
-	var req CreateDayExerciseRequest
+	var req []CreateDayExerciseRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Error(c, http.StatusBadRequest, "invalid_request", "Некорректное тело запроса", nil)
 		return
 	}
-	input := plansuc.CreateDayExerciseInput{
-		ExerciseID:      req.ExerciseID,
-		Sets:            req.Sets,
-		Reps:            req.Reps,
-		WeightKg:        req.WeightKg,
-		DurationSeconds: req.DurationSeconds,
-		DistanceMeters:  req.DistanceMeters,
-		RestSeconds:     req.RestSeconds,
-		IsSuperset:      req.IsSuperset,
-		SortOrder:       req.SortOrder,
+	if len(req) == 0 {
+		response.Error(c, http.StatusBadRequest, "invalid_request", "Список упражнений не может быть пустым", nil)
+		return
 	}
-	ex, err := h.plans.AddExerciseToDay(c.Request.Context(), planID, dayID, userID, input)
+	inputs := make([]plansuc.CreateDayExerciseInput, 0, len(req))
+	for _, r := range req {
+		inputs = append(inputs, plansuc.CreateDayExerciseInput{
+			ExerciseID:      r.ExerciseID,
+			Sets:            r.Sets,
+			Reps:            r.Reps,
+			WeightKg:        r.WeightKg,
+			DurationSeconds: r.DurationSeconds,
+			DistanceMeters:  r.DistanceMeters,
+			RestSeconds:     r.RestSeconds,
+			IsSuperset:      r.IsSuperset,
+			SortOrder:       r.SortOrder,
+		})
+	}
+	list, err := h.plans.AddExercisesToDay(c.Request.Context(), planID, dayID, userID, inputs)
 	if err != nil {
 		if isPlanOrDayNotFound(err) {
 			responsePlanOrDayNotFound(c)
@@ -697,15 +712,16 @@ func (h *Handler) AddExerciseToDay(c *gin.Context) {
 			response.Error(c, http.StatusForbidden, "forbidden", "Нет доступа к этому плану", nil)
 			return
 		}
-		if errors.Is(err, plansuc.ErrInvalidExerciseID) {
-			response.Error(c, http.StatusBadRequest, "invalid_exercise_id", "Упражнение не найдено в каталоге", nil)
+		if errors.Is(err, plansuc.ErrNoExercisesProvided) {
+			response.Error(c, http.StatusBadRequest, "invalid_request", "Список упражнений не может быть пустым", nil)
 			return
 		}
-		if errors.Is(err, plansuc.ErrInvalidSetsRange) {
-			response.Error(c, http.StatusBadRequest, "invalid_sets", "Количество подходов должно быть от 1 до 20", nil)
+		var valErr *plansuc.ErrValidation
+		if errors.As(err, &valErr) {
+			response.Error(c, http.StatusBadRequest, "validation_error", "Ошибки валидации упражнений", valErr.Errors)
 			return
 		}
-		h.logger.Error("plans_add_exercise_error", map[string]any{
+		h.logger.Error("plans_add_exercises_error", map[string]any{
 			"plan_id": planID.String(),
 			"user_id": userID.String(),
 			"error":   err.Error(),
@@ -713,7 +729,7 @@ func (h *Handler) AddExerciseToDay(c *gin.Context) {
 		response.Error(c, http.StatusInternalServerError, "internal_error", "Внутренняя ошибка сервера", nil)
 		return
 	}
-	c.JSON(http.StatusCreated, toDayExerciseResponse(ex))
+	c.JSON(http.StatusCreated, toDayExerciseResponses(list))
 }
 
 // UpdateExerciseInDay godoc

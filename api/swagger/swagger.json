@@ -972,7 +972,7 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "Добавляет упражнение в день. exercise_id должен быть из каталога. Валидация по tracking_type. sets: 1–20.",
+                "description": "Добавляет массив упражнений в день. Тело — JSON-массив объектов. Валидация по каждому элементу; при любой ошибке — 400 с details (index, code, message). exercise_id из каталога, sets: 1–20.",
                 "consumes": [
                     "application/json"
                 ],
@@ -982,7 +982,7 @@
                 "tags": [
                     "plans"
                 ],
-                "summary": "Добавить упражнение в день",
+                "summary": "Добавить упражнения в день",
                 "parameters": [
                     {
                         "type": "string",
@@ -999,12 +999,15 @@
                         "required": true
                     },
                     {
-                        "description": "Данные упражнения",
+                        "description": "Массив упражнений",
                         "name": "payload",
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/internal_handler_plans.CreateDayExerciseRequest"
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/internal_handler_plans.CreateDayExerciseRequest"
+                            }
                         }
                     }
                 ],
@@ -1012,11 +1015,14 @@
                     "201": {
                         "description": "Created",
                         "schema": {
-                            "$ref": "#/definitions/internal_handler_plans.DayExerciseResponse"
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/internal_handler_plans.DayExerciseResponse"
+                            }
                         }
                     },
                     "400": {
-                        "description": "invalid_exercise_id или invalid_sets (sets не 1–20)",
+                        "description": "invalid_request или validation_error (details — массив ошибок по индексу)",
                         "schema": {
                             "$ref": "#/definitions/workout-app_internal_handler_response.ErrorBody"
                         }

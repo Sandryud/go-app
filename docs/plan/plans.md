@@ -36,7 +36,7 @@ flowchart TB
     AddDay[AddDay]
     UpdateDay[UpdateDay]
     DeleteDay[DeleteDay]
-    AddEx[AddExerciseToDay]
+    AddEx[AddExercisesToDay]
     UpdateEx[UpdateExerciseInDay]
     DeleteEx[DeleteExerciseFromDay]
   end
@@ -50,7 +50,7 @@ flowchart TB
     U_AddDay[AddDay]
     U_UpdateDay[UpdateDay]
     U_DeleteDay[DeleteDay]
-    U_AddEx[AddExerciseToDay]
+    U_AddEx[AddExercisesToDay]
     U_UpdateEx[UpdateExerciseInDay]
     U_DeleteEx[DeleteExerciseFromDay]
   end
@@ -314,9 +314,9 @@ internal/
 
 #### POST /api/v1/plans/:id/days/:dayId/exercises
 
-Добавить упражнение в день.
+Добавить упражнения в день. Тело запроса — **JSON-массив** объектов упражнений.
 
-**Тело запроса (JSON):**
+**Тело запроса (JSON):** массив объектов, каждый элемент:
 
 | Поле | Тип | Обязательное | Описание |
 |------|-----|--------------|----------|
@@ -330,9 +330,32 @@ internal/
 | is_superset | boolean | нет | Признак суперсета |
 | sort_order | number | нет | Порядок в дне |
 
-**Ответ:** `201 Created` — объект записи упражнения в дне: id, day_id, exercise_id, sets, reps, weight_kg, duration_seconds, distance_meters, rest_seconds, is_superset, superset_group, sort_order, created_at, updated_at.
+Валидация применяется к **каждому** элементу массива. Если хотя бы одно упражнение невалидно, запрос отклоняется с **400 Bad Request**; в теле ответа в `error.details` возвращается массив объектов `{ "index": number, "code": string, "message": string }` (индекс элемента, код и сообщение ошибки).
 
-**Ошибки:** 400 (invalid_request, invalid_exercise_id — упражнение не найдено в каталоге), 401, 403, 404, 500.
+Операция атомарна: при наличии хотя бы одной ошибки **ни одна** запись упражнения не создаётся. Пустой массив упражнений также считается некорректным и приводит к 400 `invalid_request`.
+
+Пример тела запроса:
+
+```json
+[
+  {
+    "exercise_id": "push-up",
+    "sets": 3,
+    "reps": 12,
+    "rest_seconds": 60
+  },
+  {
+    "exercise_id": "squat",
+    "sets": 4,
+    "reps": 10,
+    "weight_kg": 40
+  }
+]
+```
+
+**Ответ:** `201 Created` — массив созданных записей упражнений в дне: каждый объект содержит id, day_id, exercise_id, sets, reps, weight_kg, duration_seconds, distance_meters, rest_seconds, is_superset, superset_group, sort_order, created_at, updated_at.
+
+**Ошибки:** 400 (invalid_request — некорректное тело; validation_error — ошибки валидации элементов, см. details), 401, 403, 404, 500.
 
 ---
 

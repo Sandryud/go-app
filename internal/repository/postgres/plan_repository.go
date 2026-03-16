@@ -432,20 +432,44 @@ func domainPlanDayExerciseToPg(ex *domain.PlanDayExercise) *pgPlanDayExercise {
 
 // CreateDayExercise добавляет упражнение в день.
 func (r *PlanRepository) CreateDayExercise(ctx context.Context, dayID uuid.UUID, ex *domain.PlanDayExercise) error {
-	ex.DayID = dayID
-	if ex.ID == uuid.Nil {
-		ex.ID = uuid.New()
+	return r.CreateDayExercises(ctx, dayID, []*domain.PlanDayExercise{ex})
+}
+
+// CreateDayExercises добавляет несколько упражнений в день в одной транзакции.
+func (r *PlanRepository) CreateDayExercises(ctx context.Context, dayID uuid.UUID, exercises []*domain.PlanDayExercise) error {
+	if len(exercises) == 0 {
+		return nil
 	}
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		return r.createDayExercisesWithDB(tx, dayID, exercises)
+	})
+}
+
+// createDayExercisesWithDB выполняет вставку записей упражнений, используя переданный *gorm.DB.
+func (r *PlanRepository) createDayExercisesWithDB(db *gorm.DB, dayID uuid.UUID, exercises []*domain.PlanDayExercise) error {
 	now := time.Now().UTC()
-	ex.CreatedAt = now
-	ex.UpdatedAt = now
-	m := domainPlanDayExerciseToPg(ex)
-	err := r.db.WithContext(ctx).Create(m).Error
-	if err != nil {
+
+	pgItems := make([]pgPlanDayExercise, 0, len(exercises))
+	for _, ex := range exercises {
+		ex.DayID = dayID
+		if ex.ID == uuid.Nil {
+			ex.ID = uuid.New()
+		}
+		ex.CreatedAt = now
+		ex.UpdatedAt = now
+		m := domainPlanDayExerciseToPg(ex)
+		pgItems = append(pgItems, *m)
+	}
+
+	if err := db.Create(&pgItems).Error; err != nil {
 		return err
 	}
-	ex.CreatedAt = m.CreatedAt
-	ex.UpdatedAt = m.UpdatedAt
+
+	for i := range exercises {
+		exercises[i].CreatedAt = pgItems[i].CreatedAt
+		exercises[i].UpdatedAt = pgItems[i].UpdatedAt
+	}
+
 	return nil
 }
 

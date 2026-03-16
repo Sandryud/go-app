@@ -56,6 +56,9 @@ type PlanRepository interface {
 	// CreateDayExercise добавляет упражнение в день.
 	CreateDayExercise(ctx context.Context, dayID uuid.UUID, ex *domain.PlanDayExercise) error
 
+	// CreateDayExercises добавляет несколько упражнений в день в одной транзакции.
+	CreateDayExercises(ctx context.Context, dayID uuid.UUID, exercises []*domain.PlanDayExercise) error
+
 	// GetDayExerciseByID возвращает запись упражнения в дне по id.
 	// Возвращает (nil, ErrNotFound), если запись не найдена.
 	GetDayExerciseByID(ctx context.Context, exerciseEntryID uuid.UUID) (*domain.PlanDayExercise, error)

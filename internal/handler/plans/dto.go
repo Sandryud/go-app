@@ -113,7 +113,10 @@ type DayResponse struct {
 	UpdatedAt string `json:"updated_at"`
 }
 
-// CreateDayExerciseRequest — тело запроса POST /api/v1/plans/:id/days/:dayId/exercises.
+// CreateDayExercisesRequest — тело запроса POST /api/v1/plans/:id/days/:dayId/exercises (массив упражнений).
+type CreateDayExercisesRequest []CreateDayExerciseRequest
+
+// CreateDayExerciseRequest — один элемент массива упражнений в теле POST .../exercises.
 type CreateDayExerciseRequest struct {
 	ExerciseID      string   `json:"exercise_id" binding:"required,max=100"`
 	Sets            int      `json:"sets" binding:"required,min=1,max=20"`

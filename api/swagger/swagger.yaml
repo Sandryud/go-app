@@ -1134,8 +1134,9 @@ paths:
     post:
       consumes:
       - application/json
-      description: 'Добавляет упражнение в день. exercise_id должен быть из каталога.
-        Валидация по tracking_type. sets: 1–20.'
+      description: 'Добавляет массив упражнений в день. Тело — JSON-массив объектов.
+        Валидация по каждому элементу; при любой ошибке — 400 с details (index, code,
+        message). exercise_id из каталога, sets: 1–20.'
       parameters:
       - description: ID плана (UUID)
         in: path
@@ -1147,21 +1148,26 @@ paths:
         name: dayId
         required: true
         type: string
-      - description: Данные упражнения
+      - description: Массив упражнений
         in: body
         name: payload
         required: true
         schema:
-          $ref: '#/definitions/internal_handler_plans.CreateDayExerciseRequest'
+          items:
+            $ref: '#/definitions/internal_handler_plans.CreateDayExerciseRequest'
+          type: array
       produces:
       - application/json
       responses:
         "201":
           description: Created
           schema:
-            $ref: '#/definitions/internal_handler_plans.DayExerciseResponse'
+            items:
+              $ref: '#/definitions/internal_handler_plans.DayExerciseResponse'
+            type: array
         "400":
-          description: invalid_exercise_id или invalid_sets (sets не 1–20)
+          description: invalid_request или validation_error (details — массив ошибок
+            по индексу)
           schema:
             $ref: '#/definitions/workout-app_internal_handler_response.ErrorBody'
         "401":
@@ -1182,7 +1188,7 @@ paths:
             $ref: '#/definitions/workout-app_internal_handler_response.ErrorBody'
       security:
       - BearerAuth: []
-      summary: Добавить упражнение в день
+      summary: Добавить упражнения в день
       tags:
       - plans
   /api/v1/plans/{id}/days/{dayId}/exercises/{exerciseEntryId}:

@@ -25,7 +25,25 @@ var (
 	ErrInvalidExerciseID       = errors.New("exercise_id not found in catalog")
 	// ErrInvalidSetsRange возвращается, когда количество подходов вне диапазона 1–20.
 	ErrInvalidSetsRange = errors.New("sets must be between 1 and 20")
+	// ErrNoExercisesProvided возвращается, когда список упражнений пуст.
+	ErrNoExercisesProvided = errors.New("no exercises provided")
 )
+
+// ValidationErrorItem — одна ошибка валидации с индексом элемента в массиве.
+type ValidationErrorItem struct {
+	Index   int    `json:"index"`
+	Code    string `json:"code"`
+	Message string `json:"message"`
+}
+
+// ErrValidation — ошибка валидации массива (напр. упражнений); содержит список ошибок по индексам.
+type ErrValidation struct {
+	Errors []ValidationErrorItem
+}
+
+func (e *ErrValidation) Error() string {
+	return fmt.Sprintf("validation failed for %d items", len(e.Errors))
+}
 
 // Service — usecase для работы с планами тренировок.
 type Service interface {
@@ -39,7 +57,7 @@ type Service interface {
 	UpdateDay(ctx context.Context, planID, dayID, userID uuid.UUID, input UpdateDayInput) (*plandomain.PlanDay, error)
 	DeleteDay(ctx context.Context, planID, dayID, userID uuid.UUID) error
 
-	AddExerciseToDay(ctx context.Context, planID, dayID, userID uuid.UUID, input CreateDayExerciseInput) (*plandomain.PlanDayExercise, error)
+	AddExercisesToDay(ctx context.Context, planID, dayID, userID uuid.UUID, inputs []CreateDayExerciseInput) ([]*plandomain.PlanDayExercise, error)
 	UpdateExerciseInDay(ctx context.Context, planID, dayID, exerciseEntryID, userID uuid.UUID, input UpdateDayExerciseInput) (*plandomain.PlanDayExercise, error)
 	DeleteExerciseFromDay(ctx context.Context, planID, dayID, exerciseEntryID, userID uuid.UUID) error
 }
@@ -363,8 +381,8 @@ func (s *service) DeleteDay(ctx context.Context, planID, dayID, userID uuid.UUID
 	return nil
 }
 
-// AddExerciseToDay добавляет упражнение в день. Валидация: exercise_id в каталоге, tracking_type.
-func (s *service) AddExerciseToDay(ctx context.Context, planID, dayID, userID uuid.UUID, input CreateDayExerciseInput) (*plandomain.PlanDayExercise, error) {
+// AddExercisesToDay добавляет несколько упражнений в день. Валидация по каждому элементу; при любой ошибке — весь запрос отклоняется с ErrValidation.
+func (s *service) AddExercisesToDay(ctx context.Context, planID, dayID, userID uuid.UUID, inputs []CreateDayExerciseInput) ([]*plandomain.PlanDayExercise, error) {
 	plan, err := s.repo.GetByID(ctx, planID)
 	if err != nil {
 		if errors.Is(err, repo.ErrNotFound) {
@@ -385,6 +403,47 @@ func (s *service) AddExerciseToDay(ctx context.Context, planID, dayID, userID uu
 	if day.PlanID != planID {
 		return nil, ErrDayNotFound
 	}
+
+	if len(inputs) == 0 {
+		return nil, ErrNoExercisesProvided
+	}
+
+	var validationErrors []ValidationErrorItem
+	prepared := make([]*plandomain.PlanDayExercise, 0, len(inputs))
+
+	for i, in := range inputs {
+		ex, err := s.validateAndBuildDayExercise(ctx, &in)
+		if err != nil {
+			var code, msg string
+			switch {
+			case errors.Is(err, ErrInvalidExerciseID):
+				code, msg = "invalid_exercise_id", "Упражнение не найдено в каталоге"
+			case errors.Is(err, ErrInvalidSetsRange):
+				code, msg = "invalid_sets", "Количество подходов должно быть от 1 до 20"
+			default:
+				return nil, fmt.Errorf("validate exercise at index %d: %w", i, err)
+			}
+			validationErrors = append(validationErrors, ValidationErrorItem{Index: i, Code: code, Message: msg})
+			continue
+		}
+		if ex.SortOrder == 0 {
+			ex.SortOrder = i
+		}
+		prepared = append(prepared, ex)
+	}
+
+	if len(validationErrors) > 0 {
+		return nil, &ErrValidation{Errors: validationErrors}
+	}
+
+	if err := s.repo.CreateDayExercises(ctx, dayID, prepared); err != nil {
+		return nil, fmt.Errorf("create day exercises: %w", err)
+	}
+	return prepared, nil
+}
+
+// validateAndBuildDayExercise проверяет элемент по каталогу, нормализует по tracking_type и собирает доменную запись. Не пишет в БД.
+func (s *service) validateAndBuildDayExercise(ctx context.Context, input *CreateDayExerciseInput) (*plandomain.PlanDayExercise, error) {
 	info, err := s.catalog.GetExerciseByID(ctx, input.ExerciseID)
 	if err != nil {
 		if errors.Is(err, repo.ErrNotFound) {
@@ -393,15 +452,15 @@ func (s *service) AddExerciseToDay(ctx context.Context, planID, dayID, userID uu
 		return nil, fmt.Errorf("get exercise by id: %w", err)
 	}
 	ex := &plandomain.PlanDayExercise{
-		ExerciseID: input.ExerciseID,
-		Sets:       input.Sets,
-		Reps:       input.Reps,
-		WeightKg:   input.WeightKg,
-		DurationSeconds: input.DurationSeconds,
-		DistanceMeters:  input.DistanceMeters,
-		RestSeconds:     input.RestSeconds,
-		IsSuperset:      input.IsSuperset != nil && *input.IsSuperset,
-		SortOrder:       0,
+		ExerciseID:       input.ExerciseID,
+		Sets:             input.Sets,
+		Reps:             input.Reps,
+		WeightKg:         input.WeightKg,
+		DurationSeconds:  input.DurationSeconds,
+		DistanceMeters:   input.DistanceMeters,
+		RestSeconds:      input.RestSeconds,
+		IsSuperset:       input.IsSuperset != nil && *input.IsSuperset,
+		SortOrder:        0,
 	}
 	if input.SortOrder != nil {
 		ex.SortOrder = *input.SortOrder
@@ -409,9 +468,6 @@ func (s *service) AddExerciseToDay(ctx context.Context, planID, dayID, userID uu
 	normalizeExerciseByTrackingType(info.TrackingType, ex)
 	if ex.Sets < 1 || ex.Sets > 20 {
 		return nil, ErrInvalidSetsRange
-	}
-	if err := s.repo.CreateDayExercise(ctx, dayID, ex); err != nil {
-		return nil, fmt.Errorf("create day exercise: %w", err)
 	}
 	return ex, nil
 }
