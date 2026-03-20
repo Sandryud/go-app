@@ -8,6 +8,14 @@ import (
 	domain "workout-app/internal/domain/plan"
 )
 
+// CloneFromShareInput — параметры глубокого клона плана по активной share-ссылке (одна транзакция).
+type CloneFromShareInput struct {
+	ShareID         uuid.UUID
+	SourcePlanID    uuid.UUID
+	RecipientUserID uuid.UUID
+	CopyName        string
+}
+
 // PlanRepository определяет контракт для работы с планами тренировок.
 type PlanRepository interface {
 	// Create создаёт план. Days и вложенные сущности не сохраняются этим методом.
@@ -70,4 +78,24 @@ type PlanRepository interface {
 	// DeleteDayExercise удаляет упражнение из дня.
 	// Возвращает ErrNotFound, если запись не найдена.
 	DeleteDayExercise(ctx context.Context, exerciseEntryID uuid.UUID) error
+
+	// GetActiveShareByPlanID возвращает активную share-запись для плана (revoked_at IS NULL).
+	// ErrNotFound — активной ссылки нет.
+	GetActiveShareByPlanID(ctx context.Context, planID uuid.UUID) (*domain.PlanShare, error)
+
+	// CreateShare создаёт новую share-запись с уникальным token. План должен существовать; не более одной активной ссылки на план (уникальный индекс).
+	CreateShare(ctx context.Context, planID uuid.UUID) (*domain.PlanShare, error)
+
+	// RevokeActiveShareForPlan помечает активную ссылку плана как отозванную.
+	// ErrNotFound — активной ссылки не было.
+	RevokeActiveShareForPlan(ctx context.Context, planID uuid.UUID) error
+
+	// GetActiveShareByToken возвращает активную share по token.
+	GetActiveShareByToken(ctx context.Context, token uuid.UUID) (*domain.PlanShare, error)
+
+	// ClonePlanFromShare выполняет глубокий клон плана и запись события копирования в одной транзакции.
+	ClonePlanFromShare(ctx context.Context, in CloneFromShareInput) (*domain.Plan, error)
+
+	// GetShareCopyStats возвращает число копирований и число уникальных получателей по исходному плану (channel = share).
+	GetShareCopyStats(ctx context.Context, sourcePlanID uuid.UUID) (totalCopies int64, uniqueRecipients int64, err error)
 }

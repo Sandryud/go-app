@@ -30,8 +30,8 @@ import (
 	exercisesuc "workout-app/internal/usecase/exercises"
 	plansuc "workout-app/internal/usecase/plans"
 	useruc "workout-app/internal/usecase/user"
-	"workout-app/pkg/jwt"
 	"workout-app/pkg/jsoncodec"
+	"workout-app/pkg/jwt"
 	"workout-app/pkg/logger"
 	mailerpkg "workout-app/pkg/mailer"
 
@@ -134,7 +134,7 @@ func NewServer(cfg *config.Config, db *database.DB) *Server {
 
 	planRepo := pgrepo.NewPlanRepository(gormDB)
 	plansService := plansuc.NewService(planRepo, exercisesRepo)
-	s.plansHandler = planshandler.NewHandler(plansService, s.logger)
+	s.plansHandler = planshandler.NewHandler(plansService, s.logger, cfg.Server.PublicBaseURL)
 
 	// Настраиваем middleware и роуты
 	s.setupMiddleware()
@@ -162,6 +162,7 @@ func (s *Server) setupRoutes() {
 	s.setupUserRoutes()
 	s.setupExercisesRoutes()
 	s.setupPlansRoutes()
+	s.setupPublicPlanShareRoutes()
 
 	s.router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 }
@@ -257,6 +258,10 @@ func (s *Server) setupPlansRoutes() {
 		plansGroup.GET("", s.plansHandler.List)
 		// GET /api/v1/plans/:id — один план с деревом дней и упражнений.
 		plansGroup.GET("/:id", s.plansHandler.GetByID)
+		// Share: публичная ссылка на план (только владелец).
+		plansGroup.POST("/:id/share", s.plansHandler.CreateShare)
+		plansGroup.DELETE("/:id/share", s.plansHandler.RevokeShare)
+		plansGroup.GET("/:id/share/stats", s.plansHandler.GetShareStats)
 		// POST /api/v1/plans — создать план.
 		plansGroup.POST("", s.plansHandler.Create)
 		// PUT /api/v1/plans/:id — обновить план.
@@ -274,6 +279,20 @@ func (s *Server) setupPlansRoutes() {
 		plansGroup.PUT("/:id/days/:dayId/exercises/:exerciseEntryId", s.plansHandler.UpdateExerciseInDay)
 		plansGroup.DELETE("/:id/days/:dayId/exercises/:exerciseEntryId", s.plansHandler.DeleteExerciseFromDay)
 	}
+}
+
+// setupPublicPlanShareRoutes — публичный просмотр плана по share-token и копирование (copy с JWT).
+func (s *Server) setupPublicPlanShareRoutes() {
+	v1 := s.router.Group("/api/v1")
+	byShare := v1.Group("/public/plans/by-share")
+	if s.cfg.Server.PublicPlanShareRPS > 0 {
+		byShare.Use(middleware.PublicShareRateLimit(s.cfg.Server.PublicPlanShareRPS, s.cfg.Server.PublicPlanShareBurst))
+	}
+	byShare.GET("/:token", s.plansHandler.GetPublicPlanByShareToken)
+
+	copyGroup := byShare.Group("")
+	copyGroup.Use(middleware.Auth(s.jwtService, s.logger))
+	copyGroup.POST("/:token/copy", s.plansHandler.CopyPlanFromShare)
 }
 
 // Start запускает HTTP сервер с graceful shutdown

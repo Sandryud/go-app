@@ -105,6 +105,11 @@ definitions:
       version:
         type: string
     type: object
+  internal_handler_plans.CopyFromShareRequest:
+    properties:
+      name:
+        type: string
+    type: object
   internal_handler_plans.CreateDayExerciseRequest:
     properties:
       distance_meters:
@@ -325,6 +330,22 @@ definitions:
         type: string
       user_id:
         type: string
+    type: object
+  internal_handler_plans.ShareCreatedResponse:
+    properties:
+      share_path:
+        type: string
+      share_token:
+        type: string
+      share_url:
+        type: string
+    type: object
+  internal_handler_plans.ShareStatsResponse:
+    properties:
+      total_copies:
+        type: integer
+      unique_recipients:
+        type: integer
     type: object
   internal_handler_plans.UpdateDayExerciseRequest:
     properties:
@@ -1291,6 +1312,199 @@ paths:
       security:
       - BearerAuth: []
       summary: Обновить упражнение в дне
+      tags:
+      - plans
+  /api/v1/plans/{id}/share:
+    delete:
+      description: Помечает активную ссылку как недействительную. Только владелец.
+      parameters:
+      - description: ID плана (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/workout-app_internal_handler_response.ErrorBody'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/workout-app_internal_handler_response.ErrorBody'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/workout-app_internal_handler_response.ErrorBody'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/workout-app_internal_handler_response.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: Отозвать share-ссылку на план
+      tags:
+      - plans
+    post:
+      description: Возвращает активную публичную ссылку (token, path, опционально
+        share_url при PUBLIC_BASE_URL). Только владелец плана.
+      parameters:
+      - description: ID плана (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_handler_plans.ShareCreatedResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/workout-app_internal_handler_response.ErrorBody'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/workout-app_internal_handler_response.ErrorBody'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/workout-app_internal_handler_response.ErrorBody'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/workout-app_internal_handler_response.ErrorBody'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/workout-app_internal_handler_response.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: Создать или получить share-ссылку на план
+      tags:
+      - plans
+  /api/v1/plans/{id}/share/stats:
+    get:
+      description: 'Агрегаты: всего копий и уникальных получателей (канал share).
+        Только владелец.'
+      parameters:
+      - description: ID плана (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_handler_plans.ShareStatsResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/workout-app_internal_handler_response.ErrorBody'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/workout-app_internal_handler_response.ErrorBody'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/workout-app_internal_handler_response.ErrorBody'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/workout-app_internal_handler_response.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: Статистика копирований плана по share
+      tags:
+      - plans
+  /api/v1/public/plans/by-share/{token}:
+    get:
+      description: Возвращает дерево плана по действующей ссылке. Без JWT. Поле is_active
+        в ответе всегда false.
+      parameters:
+      - description: Токен ссылки (UUID)
+        in: path
+        name: token
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_handler_plans.PlanDetailResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/workout-app_internal_handler_response.ErrorBody'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/workout-app_internal_handler_response.ErrorBody'
+        "429":
+          description: Too Many Requests
+          schema:
+            $ref: '#/definitions/workout-app_internal_handler_response.ErrorBody'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/workout-app_internal_handler_response.ErrorBody'
+      summary: Публичный просмотр плана по share-token
+      tags:
+      - plans
+  /api/v1/public/plans/by-share/{token}/copy:
+    post:
+      consumes:
+      - application/json
+      description: 'Создаёт глубокую копию плана у текущего пользователя. Тело опционально:
+        `{"name":"..."}` (до 200 символов).'
+      parameters:
+      - description: Токен ссылки (UUID)
+        in: path
+        name: token
+        required: true
+        type: string
+      - description: Опциональное имя копии
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/internal_handler_plans.CopyFromShareRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/internal_handler_plans.PlanCreatedResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/workout-app_internal_handler_response.ErrorBody'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/workout-app_internal_handler_response.ErrorBody'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/workout-app_internal_handler_response.ErrorBody'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/workout-app_internal_handler_response.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: Скопировать план себе по share-token
       tags:
       - plans
   /api/v1/users/{id}:

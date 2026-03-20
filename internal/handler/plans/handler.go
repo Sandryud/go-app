@@ -1,7 +1,9 @@
 package plans
 
 import (
+	"bytes"
 	"errors"
+	"io"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -17,13 +19,25 @@ import (
 
 // Handler обрабатывает HTTP-запросы для планов тренировок.
 type Handler struct {
-	plans plansuc.Service
-	logger logger.Logger
+	plans          plansuc.Service
+	logger         logger.Logger
+	publicBaseURL  string // для share_url в ответах; может быть пустым
 }
 
 // NewHandler создаёт handler планов.
-func NewHandler(plans plansuc.Service, logger logger.Logger) *Handler {
-	return &Handler{plans: plans, logger: logger}
+func NewHandler(plans plansuc.Service, logger logger.Logger, publicBaseURL string) *Handler {
+	return &Handler{plans: plans, logger: logger, publicBaseURL: publicBaseURL}
+}
+
+func (h *Handler) sharePath(token string) string {
+	return "/api/v1/public/plans/by-share/" + token
+}
+
+func (h *Handler) shareURL(token string) string {
+	if h.publicBaseURL == "" {
+		return ""
+	}
+	return h.publicBaseURL + h.sharePath(token)
 }
 
 func getUserIDFromContext(c *gin.Context) (uuid.UUID, error) {
@@ -853,4 +867,249 @@ func (h *Handler) DeleteExerciseFromDay(c *gin.Context) {
 		return
 	}
 	c.Status(http.StatusNoContent)
+}
+
+func toPublicPlanDetailResponse(p *plandomain.Plan) PlanDetailResponse {
+	r := toPlanDetailResponse(p)
+	r.IsActive = false
+	return r
+}
+
+// CreateShare godoc
+// @Summary      Создать или получить share-ссылку на план
+// @Description  Возвращает активную публичную ссылку (token, path, опционально share_url при PUBLIC_BASE_URL). Только владелец плана.
+// @Tags         plans
+// @Security     BearerAuth
+// @Produce      json
+// @Param        id   path      string  true  "ID плана (UUID)"
+// @Success      200  {object}  ShareCreatedResponse
+// @Failure      400  {object}  response.ErrorBody
+// @Failure      401  {object}  response.ErrorBody
+// @Failure      403  {object}  response.ErrorBody
+// @Failure      404  {object}  response.ErrorBody
+// @Failure      500  {object}  response.ErrorBody
+// @Router       /api/v1/plans/{id}/share [post]
+func (h *Handler) CreateShare(c *gin.Context) {
+	userID, err := getUserIDFromContext(c)
+	if err != nil {
+		response.Error(c, http.StatusUnauthorized, "unauthorized", "Требуется аутентификация", nil)
+		return
+	}
+	idStr := c.Param("id")
+	planID, err := uuid.Parse(idStr)
+	if err != nil {
+		response.Error(c, http.StatusBadRequest, "invalid_request", "Некорректный формат ID плана", nil)
+		return
+	}
+	share, err := h.plans.CreateOrGetShare(c.Request.Context(), planID, userID)
+	if err != nil {
+		if errors.Is(err, plansuc.ErrPlanNotFound) {
+			response.Error(c, http.StatusNotFound, "plan_not_found", "План не найден", nil)
+			return
+		}
+		if errors.Is(err, plansuc.ErrForbidden) {
+			response.Error(c, http.StatusForbidden, "forbidden", "Нет доступа к этому плану", nil)
+			return
+		}
+		h.logger.Error("plans_create_share_error", map[string]any{"plan_id": planID.String(), "user_id": userID.String(), "error": err.Error()})
+		response.Error(c, http.StatusInternalServerError, "internal_error", "Внутренняя ошибка сервера", nil)
+		return
+	}
+	token := share.Token.String()
+	resp := ShareCreatedResponse{
+		ShareToken: token,
+		SharePath:  h.sharePath(token),
+	}
+	if u := h.shareURL(token); u != "" {
+		resp.ShareURL = u
+	}
+	c.JSON(http.StatusOK, resp)
+}
+
+// RevokeShare godoc
+// @Summary      Отозвать share-ссылку на план
+// @Description  Помечает активную ссылку как недействительную. Только владелец.
+// @Tags         plans
+// @Security     BearerAuth
+// @Param        id   path      string  true  "ID плана (UUID)"
+// @Success      204  "No Content"
+// @Failure      401  {object}  response.ErrorBody
+// @Failure      403  {object}  response.ErrorBody
+// @Failure      404  {object}  response.ErrorBody
+// @Failure      500  {object}  response.ErrorBody
+// @Router       /api/v1/plans/{id}/share [delete]
+func (h *Handler) RevokeShare(c *gin.Context) {
+	userID, err := getUserIDFromContext(c)
+	if err != nil {
+		response.Error(c, http.StatusUnauthorized, "unauthorized", "Требуется аутентификация", nil)
+		return
+	}
+	planID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		response.Error(c, http.StatusBadRequest, "invalid_request", "Некорректный формат ID плана", nil)
+		return
+	}
+	if err := h.plans.RevokeShare(c.Request.Context(), planID, userID); err != nil {
+		if errors.Is(err, plansuc.ErrPlanNotFound) {
+			response.Error(c, http.StatusNotFound, "plan_not_found", "План не найден", nil)
+			return
+		}
+		if errors.Is(err, plansuc.ErrForbidden) {
+			response.Error(c, http.StatusForbidden, "forbidden", "Нет доступа к этому плану", nil)
+			return
+		}
+		if errors.Is(err, plansuc.ErrShareNotFound) {
+			response.Error(c, http.StatusNotFound, "share_not_found", "Активная ссылка не найдена", nil)
+			return
+		}
+		h.logger.Error("plans_revoke_share_error", map[string]any{"plan_id": planID.String(), "user_id": userID.String(), "error": err.Error()})
+		response.Error(c, http.StatusInternalServerError, "internal_error", "Внутренняя ошибка сервера", nil)
+		return
+	}
+	c.Status(http.StatusNoContent)
+}
+
+// GetShareStats godoc
+// @Summary      Статистика копирований плана по share
+// @Description  Агрегаты: всего копий и уникальных получателей (канал share). Только владелец.
+// @Tags         plans
+// @Security     BearerAuth
+// @Produce      json
+// @Param        id   path      string  true  "ID плана (UUID)"
+// @Success      200  {object}  ShareStatsResponse
+// @Failure      401  {object}  response.ErrorBody
+// @Failure      403  {object}  response.ErrorBody
+// @Failure      404  {object}  response.ErrorBody
+// @Failure      500  {object}  response.ErrorBody
+// @Router       /api/v1/plans/{id}/share/stats [get]
+func (h *Handler) GetShareStats(c *gin.Context) {
+	userID, err := getUserIDFromContext(c)
+	if err != nil {
+		response.Error(c, http.StatusUnauthorized, "unauthorized", "Требуется аутентификация", nil)
+		return
+	}
+	planID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		response.Error(c, http.StatusBadRequest, "invalid_request", "Некорректный формат ID плана", nil)
+		return
+	}
+	stats, err := h.plans.GetShareCopyStats(c.Request.Context(), planID, userID)
+	if err != nil {
+		if errors.Is(err, plansuc.ErrPlanNotFound) {
+			response.Error(c, http.StatusNotFound, "plan_not_found", "План не найден", nil)
+			return
+		}
+		if errors.Is(err, plansuc.ErrForbidden) {
+			response.Error(c, http.StatusForbidden, "forbidden", "Нет доступа к этому плану", nil)
+			return
+		}
+		h.logger.Error("plans_share_stats_error", map[string]any{"plan_id": planID.String(), "user_id": userID.String(), "error": err.Error()})
+		response.Error(c, http.StatusInternalServerError, "internal_error", "Внутренняя ошибка сервера", nil)
+		return
+	}
+	c.JSON(http.StatusOK, ShareStatsResponse{
+		TotalCopies:      stats.TotalCopies,
+		UniqueRecipients: stats.UniqueRecipients,
+	})
+}
+
+// GetPublicPlanByShareToken godoc
+// @Summary      Публичный просмотр плана по share-token
+// @Description  Возвращает дерево плана по действующей ссылке. Без JWT. Поле is_active в ответе всегда false.
+// @Tags         plans
+// @Produce      json
+// @Param        token  path      string  true  "Токен ссылки (UUID)"
+// @Success      200    {object}  PlanDetailResponse
+// @Failure      400    {object}  response.ErrorBody
+// @Failure      404    {object}  response.ErrorBody
+// @Failure      429    {object}  response.ErrorBody
+// @Failure      500    {object}  response.ErrorBody
+// @Router       /api/v1/public/plans/by-share/{token} [get]
+func (h *Handler) GetPublicPlanByShareToken(c *gin.Context) {
+	tokenStr := c.Param("token")
+	token, err := uuid.Parse(tokenStr)
+	if err != nil {
+		response.Error(c, http.StatusBadRequest, "invalid_request", "Некорректный формат токена", nil)
+		return
+	}
+	plan, err := h.plans.GetPublicPlanByShareToken(c.Request.Context(), token)
+	if err != nil {
+		if errors.Is(err, plansuc.ErrShareNotFound) {
+			response.Error(c, http.StatusNotFound, "share_not_found", "Ссылка недействительна или устарела", nil)
+			return
+		}
+		h.logger.Error("plans_public_by_share_error", map[string]any{"error": err.Error()})
+		response.Error(c, http.StatusInternalServerError, "internal_error", "Внутренняя ошибка сервера", nil)
+		return
+	}
+	c.JSON(http.StatusOK, toPublicPlanDetailResponse(plan))
+}
+
+// CopyPlanFromShare godoc
+// @Summary      Скопировать план себе по share-token
+// @Description  Создаёт глубокую копию плана у текущего пользователя. Тело опционально: `{"name":"..."}` (до 200 символов).
+// @Tags         plans
+// @Security     BearerAuth
+// @Accept       json
+// @Produce      json
+// @Param        token  path      string  true  "Токен ссылки (UUID)"
+// @Param        body   body      CopyFromShareRequest  false  "Опциональное имя копии"
+// @Success      201    {object}  PlanCreatedResponse
+// @Failure      400    {object}  response.ErrorBody
+// @Failure      401    {object}  response.ErrorBody
+// @Failure      404    {object}  response.ErrorBody
+// @Failure      500    {object}  response.ErrorBody
+// @Router       /api/v1/public/plans/by-share/{token}/copy [post]
+func (h *Handler) CopyPlanFromShare(c *gin.Context) {
+	userID, err := getUserIDFromContext(c)
+	if err != nil {
+		response.Error(c, http.StatusUnauthorized, "unauthorized", "Требуется аутентификация", nil)
+		return
+	}
+	tokenStr := c.Param("token")
+	token, err := uuid.Parse(tokenStr)
+	if err != nil {
+		response.Error(c, http.StatusBadRequest, "invalid_request", "Некорректный формат токена", nil)
+		return
+	}
+	body, err := io.ReadAll(c.Request.Body)
+	if err != nil {
+		response.Error(c, http.StatusBadRequest, "invalid_request", "Не удалось прочитать тело запроса", nil)
+		return
+	}
+	c.Request.Body = io.NopCloser(bytes.NewReader(body))
+	var req CopyFromShareRequest
+	if len(bytes.TrimSpace(body)) > 0 {
+		if err := c.ShouldBindJSON(&req); err != nil {
+			response.Error(c, http.StatusBadRequest, "invalid_request", "Некорректное тело запроса", nil)
+			return
+		}
+	}
+	if err := ValidateCopyFromShareRequest(&req); err != nil {
+		if errors.Is(err, ErrCopyFromShareNameTooLong) {
+			response.Error(c, http.StatusBadRequest, "invalid_plan_name", "Имя плана не должно превышать 200 символов", nil)
+			return
+		}
+		response.Error(c, http.StatusBadRequest, "invalid_request", "Некорректное тело запроса", nil)
+		return
+	}
+	plan, err := h.plans.CopyPlanFromShare(c.Request.Context(), token, userID, req.Name)
+	if err != nil {
+		if errors.Is(err, plansuc.ErrShareNotFound) {
+			response.Error(c, http.StatusNotFound, "share_not_found", "Ссылка недействительна или устарела", nil)
+			return
+		}
+		if errors.Is(err, plansuc.ErrCannotCopyOwnPlan) {
+			response.Error(c, http.StatusBadRequest, "cannot_copy_own_plan", "Нельзя скопировать свой план по этой ссылке", nil)
+			return
+		}
+		if errors.Is(err, plansuc.ErrPlanNameTooLong) {
+			response.Error(c, http.StatusBadRequest, "invalid_plan_name", "Имя плана не должно превышать 200 символов", nil)
+			return
+		}
+		h.logger.Error("plans_copy_from_share_error", map[string]any{"user_id": userID.String(), "error": err.Error()})
+		response.Error(c, http.StatusInternalServerError, "internal_error", "Внутренняя ошибка сервера", nil)
+		return
+	}
+	c.JSON(http.StatusCreated, toPlanCreatedResponse(plan))
 }

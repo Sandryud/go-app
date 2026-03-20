@@ -63,6 +63,30 @@ type pgPlanDayExercise struct {
 
 func (pgPlanDayExercise) TableName() string { return "workout_plan_day_exercises" }
 
+// pgPlanShare — ORM-модель таблицы workout_plan_shares.
+type pgPlanShare struct {
+	ID        string     `gorm:"column:id;type:uuid;primaryKey"`
+	PlanID    string     `gorm:"column:plan_id;type:uuid;not null"`
+	Token     string     `gorm:"column:token;type:uuid;not null;uniqueIndex"`
+	CreatedAt time.Time  `gorm:"column:created_at;type:timestamptz;not null"`
+	RevokedAt *time.Time `gorm:"column:revoked_at;type:timestamptz"`
+}
+
+func (pgPlanShare) TableName() string { return "workout_plan_shares" }
+
+// pgPlanCopyEvent — ORM-модель таблицы workout_plan_copy_events.
+type pgPlanCopyEvent struct {
+	ID              string    `gorm:"column:id;type:uuid;primaryKey"`
+	SourcePlanID    *string   `gorm:"column:source_plan_id;type:uuid"`
+	CopyPlanID      string    `gorm:"column:copy_plan_id;type:uuid;not null"`
+	RecipientUserID string    `gorm:"column:recipient_user_id;type:uuid;not null"`
+	Channel         string    `gorm:"column:channel;type:varchar(20);not null"`
+	ShareID         *string   `gorm:"column:share_id;type:uuid"`
+	CreatedAt       time.Time `gorm:"column:created_at;type:timestamptz;not null"`
+}
+
+func (pgPlanCopyEvent) TableName() string { return "workout_plan_copy_events" }
+
 // PlanRepository реализует repo.PlanRepository на GORM/Postgres.
 type PlanRepository struct {
 	db *gorm.DB
@@ -520,4 +544,246 @@ func (r *PlanRepository) DeleteDayExercise(ctx context.Context, exerciseEntryID 
 		return repo.ErrNotFound
 	}
 	return nil
+}
+
+func pgShareToDomain(m *pgPlanShare) (*domain.PlanShare, error) {
+	id, err := uuid.Parse(m.ID)
+	if err != nil {
+		return nil, fmt.Errorf("parse share id: %w", err)
+	}
+	planID, err := uuid.Parse(m.PlanID)
+	if err != nil {
+		return nil, fmt.Errorf("parse share plan_id: %w", err)
+	}
+	token, err := uuid.Parse(m.Token)
+	if err != nil {
+		return nil, fmt.Errorf("parse share token: %w", err)
+	}
+	return &domain.PlanShare{
+		ID:        id,
+		PlanID:    planID,
+		Token:     token,
+		CreatedAt: m.CreatedAt,
+		RevokedAt: m.RevokedAt,
+	}, nil
+}
+
+// GetActiveShareByPlanID возвращает активную share-запись для плана.
+func (r *PlanRepository) GetActiveShareByPlanID(ctx context.Context, planID uuid.UUID) (*domain.PlanShare, error) {
+	var m pgPlanShare
+	err := r.db.WithContext(ctx).
+		Where("plan_id = ? AND revoked_at IS NULL", planID.String()).
+		Take(&m).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, repo.ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return pgShareToDomain(&m)
+}
+
+// CreateShare создаёт новую share-запись (вызвать только если активной ещё нет).
+func (r *PlanRepository) CreateShare(ctx context.Context, planID uuid.UUID) (*domain.PlanShare, error) {
+	id := uuid.New()
+	token := uuid.New()
+	now := time.Now().UTC()
+	row := pgPlanShare{
+		ID:        id.String(),
+		PlanID:    planID.String(),
+		Token:     token.String(),
+		CreatedAt: now,
+	}
+	if err := r.db.WithContext(ctx).Create(&row).Error; err != nil {
+		// Гонка: два параллельных CreateShare на один план — частичный unique (plan_id) WHERE revoked_at IS NULL.
+		if isUniqueViolation(err) {
+			existing, gerr := r.GetActiveShareByPlanID(ctx, planID)
+			if gerr == nil {
+				return existing, nil
+			}
+			return nil, err
+		}
+		return nil, err
+	}
+	return &domain.PlanShare{
+		ID:        id,
+		PlanID:    planID,
+		Token:     token,
+		CreatedAt: now,
+		RevokedAt: nil,
+	}, nil
+}
+
+// RevokeActiveShareForPlan отзывает активную ссылку плана.
+func (r *PlanRepository) RevokeActiveShareForPlan(ctx context.Context, planID uuid.UUID) error {
+	now := time.Now().UTC()
+	res := r.db.WithContext(ctx).Model(&pgPlanShare{}).
+		Where("plan_id = ? AND revoked_at IS NULL", planID.String()).
+		Update("revoked_at", now)
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return repo.ErrNotFound
+	}
+	return nil
+}
+
+// GetActiveShareByToken возвращает активную share по token.
+func (r *PlanRepository) GetActiveShareByToken(ctx context.Context, token uuid.UUID) (*domain.PlanShare, error) {
+	var m pgPlanShare
+	err := r.db.WithContext(ctx).
+		Table("workout_plan_shares").
+		Joins("JOIN workout_plans ON workout_plans.id = workout_plan_shares.plan_id").
+		Joins("JOIN users ON users.id = workout_plans.user_id").
+		Where("workout_plan_shares.token = ? AND workout_plan_shares.revoked_at IS NULL AND users.deleted_at IS NULL", token.String()).
+		Take(&m).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, repo.ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return pgShareToDomain(&m)
+}
+
+func (r *PlanRepository) getPlanWithDaysAndExercisesWithDB(db *gorm.DB, planID uuid.UUID) (*domain.Plan, error) {
+	var m pgPlan
+	err := db.
+		Preload("Days", func(d *gorm.DB) *gorm.DB { return d.Order("sort_order") }).
+		Preload("Days.Exercises", func(d *gorm.DB) *gorm.DB { return d.Order("sort_order") }).
+		Where("id = ?", planID.String()).
+		Take(&m).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, repo.ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return pgPlanToDomain(&m)
+}
+
+// ClonePlanFromShare выполняет глубокий клон и запись события копирования в одной транзакции.
+func (r *PlanRepository) ClonePlanFromShare(ctx context.Context, in repo.CloneFromShareInput) (*domain.Plan, error) {
+	var newPlanID uuid.UUID
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var shareRow pgPlanShare
+		if err := tx.
+			Table("workout_plan_shares").
+			Joins("JOIN workout_plans ON workout_plans.id = workout_plan_shares.plan_id").
+			Joins("JOIN users ON users.id = workout_plans.user_id").
+			Where("workout_plan_shares.id = ? AND workout_plan_shares.revoked_at IS NULL AND users.deleted_at IS NULL", in.ShareID.String()).
+			Take(&shareRow).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return repo.ErrNotFound
+			}
+			return err
+		}
+		if shareRow.PlanID != in.SourcePlanID.String() {
+			return repo.ErrNotFound
+		}
+
+		source, err := r.getPlanWithDaysAndExercisesWithDB(tx, in.SourcePlanID)
+		if err != nil {
+			return err
+		}
+
+		newPlanID = uuid.New()
+		now := time.Now().UTC()
+		srcID := in.SourcePlanID
+		newPlan := &domain.Plan{
+			ID:           newPlanID,
+			UserID:       in.RecipientUserID,
+			Name:         in.CopyName,
+			IsActive:     false,
+			IsPublic:     false,
+			Category:     source.Category,
+			Level:        source.Level,
+			SourcePlanID: &srcID,
+			CreatedAt:    now,
+			UpdatedAt:    now,
+		}
+		if err := tx.Create(domainPlanToPg(newPlan)).Error; err != nil {
+			return err
+		}
+
+		dayIDMap := make(map[uuid.UUID]uuid.UUID, len(source.Days))
+		for _, d := range source.Days {
+			newDayID := uuid.New()
+			dayIDMap[d.ID] = newDayID
+			day := &domain.PlanDay{
+				ID:        newDayID,
+				PlanID:    newPlanID,
+				Name:      d.Name,
+				SortOrder: d.SortOrder,
+				CreatedAt: now,
+				UpdatedAt: now,
+			}
+			if err := tx.Create(domainPlanDayToPg(day)).Error; err != nil {
+				return err
+			}
+		}
+
+		for _, d := range source.Days {
+			newDayID := dayIDMap[d.ID]
+			if len(d.Exercises) == 0 {
+				continue
+			}
+			exercises := make([]*domain.PlanDayExercise, 0, len(d.Exercises))
+			for i := range d.Exercises {
+				ex := d.Exercises[i]
+				exercises = append(exercises, &domain.PlanDayExercise{
+					DayID:           newDayID,
+					ExerciseID:      ex.ExerciseID,
+					Sets:            ex.Sets,
+					Reps:            ex.Reps,
+					WeightKg:        ex.WeightKg,
+					DurationSeconds: ex.DurationSeconds,
+					DistanceMeters:  ex.DistanceMeters,
+					RestSeconds:     ex.RestSeconds,
+					IsSuperset:      ex.IsSuperset,
+					SupersetGroup:   ex.SupersetGroup,
+					SortOrder:       ex.SortOrder,
+				})
+			}
+			if err := r.createDayExercisesWithDB(tx, newDayID, exercises); err != nil {
+				return err
+			}
+		}
+
+		srcStr := in.SourcePlanID.String()
+		shareStr := in.ShareID.String()
+		event := pgPlanCopyEvent{
+			ID:              uuid.New().String(),
+			SourcePlanID:    &srcStr,
+			CopyPlanID:      newPlanID.String(),
+			RecipientUserID: in.RecipientUserID.String(),
+			Channel:         domain.PlanCopyChannelShare,
+			ShareID:         &shareStr,
+			CreatedAt:       now,
+		}
+		return tx.Create(&event).Error
+	})
+	if err != nil {
+		return nil, err
+	}
+	return r.GetByID(ctx, newPlanID)
+}
+
+// GetShareCopyStats возвращает агрегаты копирований по исходному плану (канал share).
+func (r *PlanRepository) GetShareCopyStats(ctx context.Context, sourcePlanID uuid.UUID) (int64, int64, error) {
+	var row struct {
+		Total            int64 `gorm:"column:total"`
+		UniqueRecipients int64 `gorm:"column:unique_recipients"`
+	}
+	err := r.db.WithContext(ctx).Raw(`
+		SELECT COUNT(*)::bigint AS total,
+		       COUNT(DISTINCT recipient_user_id)::bigint AS unique_recipients
+		FROM workout_plan_copy_events
+		WHERE source_plan_id = ? AND channel = ?
+	`, sourcePlanID.String(), domain.PlanCopyChannelShare).Scan(&row).Error
+	if err != nil {
+		return 0, 0, err
+	}
+	return row.Total, row.UniqueRecipients, nil
 }

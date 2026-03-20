@@ -25,6 +25,12 @@ type Config struct {
 type ServerConfig struct {
 	Host string
 	Port string
+	// PublicBaseURL — базовый URL клиента/лендинга для share-ссылок в ответах API (без завершающего /). Пусто — в ответе только token/path.
+	PublicBaseURL string
+	// PublicPlanShareRPS — лимит запросов GET /public/plans/by-share/:token на один IP (токен-бакет). 0 — без лимита.
+	PublicPlanShareRPS float64
+	// PublicPlanShareBurst — размер «всплеска» для того же лимита.
+	PublicPlanShareBurst int
 }
 
 // DatabaseConfig хранит конфигурацию базы данных
@@ -94,12 +100,18 @@ func Load() (*Config, error) {
 	// Загружаем конфигурацию сервера
 	cfg.Server.Host = getEnv("SERVER_HOST", "localhost")
 	cfg.Server.Port = getEnv("SERVER_PORT", "8080")
+	cfg.Server.PublicBaseURL = strings.TrimSuffix(getEnv("PUBLIC_BASE_URL", ""), "/")
+	cfg.Server.PublicPlanShareRPS = getEnvAsFloat64("PUBLIC_PLAN_SHARE_RPS", 0)
+	cfg.Server.PublicPlanShareBurst = getEnvAsInt("PUBLIC_PLAN_SHARE_BURST", 60)
+	if cfg.Server.PublicPlanShareBurst < 1 {
+		cfg.Server.PublicPlanShareBurst = 1
+	}
 
 	// Загружаем конфигурацию базы данных
 	cfg.Database.Host = getEnv("DB_HOST", "localhost")
 	cfg.Database.Port = getEnv("DB_PORT", "5432")
 	cfg.Database.User = getEnv("DB_USER", "postgres")
-	cfg.Database.Password = getEnv("DB_PASSWORD", "")
+	cfg.Database.Password = getEnv("DB_PASSWORD", "postgres")
 	cfg.Database.DBName = getEnv("DB_NAME", "workout_app")
 	cfg.Database.SSLMode = getEnv("DB_SSLMODE", "disable")
 
@@ -222,6 +234,19 @@ func getEnvAsInt(key string, defaultValue int) int {
 		return defaultValue
 	}
 	return intValue
+}
+
+// getEnvAsFloat64 парсит float64 из окружения или возвращает defaultValue.
+func getEnvAsFloat64(key string, defaultValue float64) float64 {
+	value := os.Getenv(key)
+	if value == "" {
+		return defaultValue
+	}
+	f, err := strconv.ParseFloat(value, 64)
+	if err != nil {
+		return defaultValue
+	}
+	return f
 }
 
 // getEnvAsDuration получает переменную окружения как time.Duration или возвращает значение по умолчанию

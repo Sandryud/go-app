@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 
@@ -27,6 +29,12 @@ var (
 	ErrInvalidSetsRange = errors.New("sets must be between 1 and 20")
 	// ErrNoExercisesProvided возвращается, когда список упражнений пуст.
 	ErrNoExercisesProvided = errors.New("no exercises provided")
+	// ErrShareNotFound — ссылка share не найдена или отозвана.
+	ErrShareNotFound = errors.New("share not found or revoked")
+	// ErrCannotCopyOwnPlan — нельзя скопировать свой план по своей же share-ссылке.
+	ErrCannotCopyOwnPlan = errors.New("cannot copy own plan via share link")
+	// ErrPlanNameTooLong — имя плана длиннее допустимого (например при копировании по share).
+	ErrPlanNameTooLong = errors.New("plan name exceeds max length")
 )
 
 // ValidationErrorItem — одна ошибка валидации с индексом элемента в массиве.
@@ -60,6 +68,23 @@ type Service interface {
 	AddExercisesToDay(ctx context.Context, planID, dayID, userID uuid.UUID, inputs []CreateDayExerciseInput) ([]*plandomain.PlanDayExercise, error)
 	UpdateExerciseInDay(ctx context.Context, planID, dayID, exerciseEntryID, userID uuid.UUID, input UpdateDayExerciseInput) (*plandomain.PlanDayExercise, error)
 	DeleteExerciseFromDay(ctx context.Context, planID, dayID, exerciseEntryID, userID uuid.UUID) error
+
+	// CreateOrGetShare создаёт активную share-ссылку или возвращает существующую (только владелец плана).
+	CreateOrGetShare(ctx context.Context, planID, ownerUserID uuid.UUID) (*plandomain.PlanShare, error)
+	// RevokeShare отзывает активную ссылку (только владелец).
+	RevokeShare(ctx context.Context, planID, ownerUserID uuid.UUID) error
+	// GetPublicPlanByShareToken возвращает план с деревом по активному token (без проверки владельца).
+	GetPublicPlanByShareToken(ctx context.Context, token uuid.UUID) (*plandomain.Plan, error)
+	// CopyPlanFromShare создаёт глубокую копию плана у получателя по token.
+	CopyPlanFromShare(ctx context.Context, token, recipientUserID uuid.UUID, optionalName *string) (*plandomain.Plan, error)
+	// GetShareCopyStats — метрики копирований по исходному плану (только владелец).
+	GetShareCopyStats(ctx context.Context, planID, ownerUserID uuid.UUID) (ShareCopyStats, error)
+}
+
+// ShareCopyStats — агрегаты по событию копирования (канал share).
+type ShareCopyStats struct {
+	TotalCopies       int64
+	UniqueRecipients  int64
 }
 
 // CreatePlanInput — вход создания плана.
@@ -609,4 +634,137 @@ func isValidLevel(l plandomain.PlanLevel) bool {
 		}
 	}
 	return false
+}
+
+// CreateOrGetShare создаёт или возвращает активную share-ссылку для плана.
+func (s *service) CreateOrGetShare(ctx context.Context, planID, ownerUserID uuid.UUID) (*plandomain.PlanShare, error) {
+	plan, err := s.repo.GetByID(ctx, planID)
+	if err != nil {
+		if errors.Is(err, repo.ErrNotFound) {
+			return nil, ErrPlanNotFound
+		}
+		return nil, fmt.Errorf("get plan: %w", err)
+	}
+	if plan.UserID != ownerUserID {
+		return nil, ErrForbidden
+	}
+	share, err := s.repo.GetActiveShareByPlanID(ctx, planID)
+	if err == nil {
+		return share, nil
+	}
+	if !errors.Is(err, repo.ErrNotFound) {
+		return nil, fmt.Errorf("get active share: %w", err)
+	}
+	share, err = s.repo.CreateShare(ctx, planID)
+	if err != nil {
+		return nil, fmt.Errorf("create share: %w", err)
+	}
+	return share, nil
+}
+
+// RevokeShare отзывает активную ссылку.
+func (s *service) RevokeShare(ctx context.Context, planID, ownerUserID uuid.UUID) error {
+	plan, err := s.repo.GetByID(ctx, planID)
+	if err != nil {
+		if errors.Is(err, repo.ErrNotFound) {
+			return ErrPlanNotFound
+		}
+		return fmt.Errorf("get plan: %w", err)
+	}
+	if plan.UserID != ownerUserID {
+		return ErrForbidden
+	}
+	if err := s.repo.RevokeActiveShareForPlan(ctx, planID); err != nil {
+		if errors.Is(err, repo.ErrNotFound) {
+			return ErrShareNotFound
+		}
+		return fmt.Errorf("revoke share: %w", err)
+	}
+	return nil
+}
+
+// GetPublicPlanByShareToken возвращает полное дерево плана по валидному share-token.
+func (s *service) GetPublicPlanByShareToken(ctx context.Context, token uuid.UUID) (*plandomain.Plan, error) {
+	share, err := s.repo.GetActiveShareByToken(ctx, token)
+	if err != nil {
+		if errors.Is(err, repo.ErrNotFound) {
+			return nil, ErrShareNotFound
+		}
+		return nil, fmt.Errorf("get share by token: %w", err)
+	}
+	plan, err := s.repo.GetByIDWithDaysAndExercises(ctx, share.PlanID)
+	if err != nil {
+		if errors.Is(err, repo.ErrNotFound) {
+			return nil, ErrShareNotFound
+		}
+		return nil, fmt.Errorf("get plan with tree: %w", err)
+	}
+	return plan, nil
+}
+
+// CopyPlanFromShare копирует план получателю по share-token.
+func (s *service) CopyPlanFromShare(ctx context.Context, token, recipientUserID uuid.UUID, optionalName *string) (*plandomain.Plan, error) {
+	share, err := s.repo.GetActiveShareByToken(ctx, token)
+	if err != nil {
+		if errors.Is(err, repo.ErrNotFound) {
+			return nil, ErrShareNotFound
+		}
+		return nil, fmt.Errorf("get share by token: %w", err)
+	}
+	source, err := s.repo.GetByID(ctx, share.PlanID)
+	if err != nil {
+		if errors.Is(err, repo.ErrNotFound) {
+			return nil, ErrShareNotFound
+		}
+		return nil, fmt.Errorf("get source plan: %w", err)
+	}
+	if source.UserID == recipientUserID {
+		return nil, ErrCannotCopyOwnPlan
+	}
+	name := "Копия: " + source.Name
+	if optionalName != nil {
+		if t := strings.TrimSpace(*optionalName); t != "" {
+			if utf8.RuneCountInString(t) > 200 {
+				return nil, ErrPlanNameTooLong
+			}
+			name = t
+		}
+	}
+	// Автогенерируемое имя («Копия: …») при длинном исходном названии укорачиваем.
+	if utf8.RuneCountInString(name) > 200 {
+		r := []rune(name)
+		name = string(r[:200])
+	}
+	out, err := s.repo.ClonePlanFromShare(ctx, repo.CloneFromShareInput{
+		ShareID:         share.ID,
+		SourcePlanID:    share.PlanID,
+		RecipientUserID: recipientUserID,
+		CopyName:        name,
+	})
+	if err != nil {
+		if errors.Is(err, repo.ErrNotFound) {
+			return nil, ErrShareNotFound
+		}
+		return nil, fmt.Errorf("clone plan from share: %w", err)
+	}
+	return out, nil
+}
+
+// GetShareCopyStats возвращает метрики по копированиям через share.
+func (s *service) GetShareCopyStats(ctx context.Context, planID, ownerUserID uuid.UUID) (ShareCopyStats, error) {
+	plan, err := s.repo.GetByID(ctx, planID)
+	if err != nil {
+		if errors.Is(err, repo.ErrNotFound) {
+			return ShareCopyStats{}, ErrPlanNotFound
+		}
+		return ShareCopyStats{}, fmt.Errorf("get plan: %w", err)
+	}
+	if plan.UserID != ownerUserID {
+		return ShareCopyStats{}, ErrForbidden
+	}
+	total, unique, err := s.repo.GetShareCopyStats(ctx, planID)
+	if err != nil {
+		return ShareCopyStats{}, fmt.Errorf("share copy stats: %w", err)
+	}
+	return ShareCopyStats{TotalCopies: total, UniqueRecipients: unique}, nil
 }

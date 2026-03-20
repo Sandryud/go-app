@@ -1,7 +1,9 @@
 package plans
 
 import (
+	"errors"
 	"time"
+	"unicode/utf8"
 )
 
 // CreatePlanRequest — тело запроса POST /api/v1/plans.
@@ -161,4 +163,36 @@ type DayExerciseResponse struct {
 
 func formatTime(t time.Time) string {
 	return t.Format(time.RFC3339)
+}
+
+// ShareCreatedResponse — ответ POST /api/v1/plans/:id/share.
+type ShareCreatedResponse struct {
+	ShareToken string `json:"share_token"`
+	SharePath  string `json:"share_path"`
+	ShareURL   string `json:"share_url,omitempty"`
+}
+
+// ShareStatsResponse — ответ GET /api/v1/plans/:id/share/stats.
+type ShareStatsResponse struct {
+	TotalCopies      int64 `json:"total_copies"`
+	UniqueRecipients int64 `json:"unique_recipients"`
+}
+
+// CopyFromShareRequest — тело POST .../public/plans/by-share/:token/copy.
+type CopyFromShareRequest struct {
+	Name *string `json:"name,omitempty" binding:"omitempty"`
+}
+
+// ErrCopyFromShareNameTooLong возвращается из ValidateCopyFromShareRequest.
+var ErrCopyFromShareNameTooLong = errors.New("plan name exceeds 200 characters")
+
+// ValidateCopyFromShareRequest проверяет длину имени в рунах (как в usecase).
+func ValidateCopyFromShareRequest(req *CopyFromShareRequest) error {
+	if req == nil || req.Name == nil {
+		return nil
+	}
+	if utf8.RuneCountInString(*req.Name) > 200 {
+		return ErrCopyFromShareNameTooLong
+	}
+	return nil
 }

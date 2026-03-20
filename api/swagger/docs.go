@@ -1215,6 +1215,300 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/plans/{id}/share": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Возвращает активную публичную ссылку (token, path, опционально share_url при PUBLIC_BASE_URL). Только владелец плана.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "plans"
+                ],
+                "summary": "Создать или получить share-ссылку на план",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "ID плана (UUID)",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler_plans.ShareCreatedResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/workout-app_internal_handler_response.ErrorBody"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/workout-app_internal_handler_response.ErrorBody"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/workout-app_internal_handler_response.ErrorBody"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/workout-app_internal_handler_response.ErrorBody"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workout-app_internal_handler_response.ErrorBody"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Помечает активную ссылку как недействительную. Только владелец.",
+                "tags": [
+                    "plans"
+                ],
+                "summary": "Отозвать share-ссылку на план",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "ID плана (UUID)",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/workout-app_internal_handler_response.ErrorBody"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/workout-app_internal_handler_response.ErrorBody"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/workout-app_internal_handler_response.ErrorBody"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workout-app_internal_handler_response.ErrorBody"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/plans/{id}/share/stats": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Агрегаты: всего копий и уникальных получателей (канал share). Только владелец.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "plans"
+                ],
+                "summary": "Статистика копирований плана по share",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "ID плана (UUID)",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler_plans.ShareStatsResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/workout-app_internal_handler_response.ErrorBody"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/workout-app_internal_handler_response.ErrorBody"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/workout-app_internal_handler_response.ErrorBody"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workout-app_internal_handler_response.ErrorBody"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/public/plans/by-share/{token}": {
+            "get": {
+                "description": "Возвращает дерево плана по действующей ссылке. Без JWT. Поле is_active в ответе всегда false.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "plans"
+                ],
+                "summary": "Публичный просмотр плана по share-token",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Токен ссылки (UUID)",
+                        "name": "token",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler_plans.PlanDetailResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/workout-app_internal_handler_response.ErrorBody"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/workout-app_internal_handler_response.ErrorBody"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "$ref": "#/definitions/workout-app_internal_handler_response.ErrorBody"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workout-app_internal_handler_response.ErrorBody"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/public/plans/by-share/{token}/copy": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Создаёт глубокую копию плана у текущего пользователя. Тело опционально: ` + "`" + `{\"name\":\"...\"}` + "`" + ` (до 200 символов).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "plans"
+                ],
+                "summary": "Скопировать план себе по share-token",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Токен ссылки (UUID)",
+                        "name": "token",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Опциональное имя копии",
+                        "name": "body",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler_plans.CopyFromShareRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler_plans.PlanCreatedResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/workout-app_internal_handler_response.ErrorBody"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/workout-app_internal_handler_response.ErrorBody"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/workout-app_internal_handler_response.ErrorBody"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workout-app_internal_handler_response.ErrorBody"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/users/me": {
             "get": {
                 "security": [
@@ -1732,6 +2026,14 @@ const docTemplate = `{
                 }
             }
         },
+        "internal_handler_plans.CopyFromShareRequest": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
         "internal_handler_plans.CreateDayExerciseRequest": {
             "type": "object",
             "required": [
@@ -2060,6 +2362,31 @@ const docTemplate = `{
                 },
                 "user_id": {
                     "type": "string"
+                }
+            }
+        },
+        "internal_handler_plans.ShareCreatedResponse": {
+            "type": "object",
+            "properties": {
+                "share_path": {
+                    "type": "string"
+                },
+                "share_token": {
+                    "type": "string"
+                },
+                "share_url": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_handler_plans.ShareStatsResponse": {
+            "type": "object",
+            "properties": {
+                "total_copies": {
+                    "type": "integer"
+                },
+                "unique_recipients": {
+                    "type": "integer"
                 }
             }
         },
