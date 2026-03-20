@@ -60,7 +60,7 @@ fmt: ## Форматировать код
 test-integration: ## Запустить интеграционные тесты (используется TEST_DB_NAME=workout_app_test)
 	@echo "Запуск интеграционных тестов (TEST_DB_NAME=workout_app_test)..."
 	@export TEST_DB_NAME=workout_app_test; \
-	go test ./tests/integration/... -tags=integration
+	go test -p 1 ./tests/integration/... -tags=integration
 
 docker-up: ## Запустить Docker Compose (PostgreSQL)
 	@docker-compose up -d postgres

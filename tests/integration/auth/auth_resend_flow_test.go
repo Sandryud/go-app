@@ -14,7 +14,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	authhandler "workout-app/internal/handler/auth"
 	testcfg "workout-app/tests/integration/config"
 )
 
@@ -33,7 +32,7 @@ func TestAuth_Register_Resend_Verify_Login(t *testing.T) {
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
 
-	var regResp authhandler.RegisterResponse
+	var regResp testcfg.RegisterResp
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &regResp))
 	require.Equal(t, email, regResp.Email)
 
@@ -56,7 +55,7 @@ func TestAuth_Register_Resend_Verify_Login(t *testing.T) {
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 
-	var loginResp authhandler.LoginResponse
+	var loginResp testcfg.LoginResp
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &loginResp))
 	require.Equal(t, regResp.UserID, loginResp.UserID)
 	require.NotEmpty(t, loginResp.Tokens.AccessToken)

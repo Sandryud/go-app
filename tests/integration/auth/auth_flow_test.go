@@ -12,7 +12,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	authhandler "workout-app/internal/handler/auth"
 	testcfg "workout-app/tests/integration/config"
 )
 
@@ -30,7 +29,7 @@ func TestAuth_Register_Login_Refresh(t *testing.T) {
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
 
-	var regResp authhandler.RegisterResponse
+	var regResp testcfg.RegisterResp
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &regResp))
 	require.Equal(t, "itest1@example.com", regResp.Email)
 	require.Equal(t, "itest1", regResp.Username)
@@ -48,7 +47,7 @@ func TestAuth_Register_Login_Refresh(t *testing.T) {
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 
-	var loginResp authhandler.LoginResponse
+	var loginResp testcfg.LoginResp
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &loginResp))
 	require.Equal(t, regResp.UserID, loginResp.UserID)
 
@@ -62,7 +61,7 @@ func TestAuth_Register_Login_Refresh(t *testing.T) {
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 
-	var refreshResp authhandler.LoginResponse
+	var refreshResp testcfg.LoginResp
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &refreshResp))
 	require.Equal(t, loginResp.UserID, refreshResp.UserID)
 	require.NotEmpty(t, refreshResp.Tokens.AccessToken)
@@ -82,7 +81,7 @@ func TestAuth_Register_WithDeletedAccount(t *testing.T) {
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
 
-	var regResp authhandler.RegisterResponse
+	var regResp testcfg.RegisterResp
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &regResp))
 	require.Equal(t, "deleted@example.com", regResp.Email)
 
@@ -97,7 +96,7 @@ func TestAuth_Register_WithDeletedAccount(t *testing.T) {
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 
-	var loginResp authhandler.LoginResponse
+	var loginResp testcfg.LoginResp
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &loginResp))
 	access := loginResp.Tokens.AccessToken
 

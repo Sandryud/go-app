@@ -12,8 +12,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	authhandler "workout-app/internal/handler/auth"
-	userhandler "workout-app/internal/handler/user"
 	testcfg "workout-app/tests/integration/config"
 )
 
@@ -31,7 +29,7 @@ func TestUser_EmailChange_Flow(t *testing.T) {
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
 
-	var regResp authhandler.RegisterResponse
+	var regResp testcfg.RegisterResp
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &regResp))
 	userID := regResp.UserID
 
@@ -46,7 +44,7 @@ func TestUser_EmailChange_Flow(t *testing.T) {
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 
-	var loginResp authhandler.LoginResponse
+	var loginResp testcfg.LoginResp
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &loginResp))
 	access := loginResp.Tokens.AccessToken
 
@@ -57,7 +55,7 @@ func TestUser_EmailChange_Flow(t *testing.T) {
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 
-	var profileBefore userhandler.ProfileResponse
+	var profileBefore testcfg.ProfileResp
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &profileBefore))
 	require.Equal(t, email, profileBefore.Email)
 
@@ -71,7 +69,7 @@ func TestUser_EmailChange_Flow(t *testing.T) {
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 
-	var changeEmailResp userhandler.ChangeEmailResponse
+	var changeEmailResp testcfg.ChangeEmailResp
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &changeEmailResp))
 	require.Contains(t, changeEmailResp.Message, "Код подтверждения отправлен")
 
@@ -85,7 +83,7 @@ func TestUser_EmailChange_Flow(t *testing.T) {
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 
-	var profileAfter userhandler.ProfileResponse
+	var profileAfter testcfg.ProfileResp
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &profileAfter))
 	require.Equal(t, newEmail, profileAfter.Email)
 	require.Equal(t, profileBefore.Username, profileAfter.Username)
@@ -112,7 +110,7 @@ func TestUser_EmailChange_SameEmail(t *testing.T) {
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 
-	var loginResp authhandler.LoginResponse
+	var loginResp testcfg.LoginResp
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &loginResp))
 	access := loginResp.Tokens.AccessToken
 
@@ -160,7 +158,7 @@ func TestUser_EmailChange_EmailAlreadyExists(t *testing.T) {
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 
-	var loginResp2 authhandler.LoginResponse
+	var loginResp2 testcfg.LoginResp
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &loginResp2))
 	access2 := loginResp2.Tokens.AccessToken
 
@@ -195,7 +193,7 @@ func TestUser_EmailChange_VerifyEmailChange_InvalidCode(t *testing.T) {
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 
-	var loginResp authhandler.LoginResponse
+	var loginResp testcfg.LoginResp
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &loginResp))
 	access := loginResp.Tokens.AccessToken
 
@@ -240,7 +238,7 @@ func TestUser_EmailChange_VerifyEmailChange_CodeNotFound(t *testing.T) {
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 
-	var loginResp authhandler.LoginResponse
+	var loginResp testcfg.LoginResp
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &loginResp))
 	access := loginResp.Tokens.AccessToken
 

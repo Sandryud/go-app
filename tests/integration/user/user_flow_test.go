@@ -13,8 +13,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 
-	authhandler "workout-app/internal/handler/auth"
-	userhandler "workout-app/internal/handler/user"
 	testcfg "workout-app/tests/integration/config"
 )
 
@@ -31,7 +29,7 @@ func registerAndLoginUser(t *testing.T, router *gin.Engine, email, password, use
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
 
-	var regResp authhandler.RegisterResponse
+	var regResp testcfg.RegisterResp
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &regResp))
 	require.Equal(t, email, regResp.Email)
 	require.Equal(t, username, regResp.Username)
@@ -48,7 +46,7 @@ func registerAndLoginUser(t *testing.T, router *gin.Engine, email, password, use
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 
-	var loginResp authhandler.LoginResponse
+	var loginResp testcfg.LoginResp
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &loginResp))
 	accessToken := loginResp.Tokens.AccessToken
 	require.NotEmpty(t, accessToken)
@@ -85,7 +83,7 @@ func TestUser_Profile_Flow(t *testing.T) {
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 
-	var profile userhandler.ProfileResponse
+	var profile testcfg.ProfileResp
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &profile))
 	require.Equal(t, "uflow", profile.Username)
 
@@ -98,7 +96,7 @@ func TestUser_Profile_Flow(t *testing.T) {
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 
-	var updated userhandler.ProfileResponse
+	var updated testcfg.ProfileResp
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &updated))
 	require.Equal(t, "uflownew", updated.Username)
 	require.Equal(t, "intermediate", updated.TrainingLevel)
@@ -132,7 +130,7 @@ func TestUser_Profile_Flow(t *testing.T) {
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 
-	var restoredResp authhandler.RestoreAccountResponse
+	var restoredResp testcfg.LoginResp
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &restoredResp))
 	require.Equal(t, userID, restoredResp.UserID)
 	require.Equal(t, "uflow@example.com", restoredResp.Email)
@@ -148,7 +146,7 @@ func TestUser_Profile_Flow(t *testing.T) {
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 
-	var restoredProfile userhandler.ProfileResponse
+	var restoredProfile testcfg.ProfileResp
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &restoredProfile))
 	require.Equal(t, "uflownew", restoredProfile.Username)
 	require.Equal(t, "intermediate", restoredProfile.TrainingLevel)
@@ -167,7 +165,7 @@ func TestUser_GetByID(t *testing.T) {
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
 
-	var regResp1 authhandler.RegisterResponse
+	var regResp1 testcfg.RegisterResp
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &regResp1))
 	user1ID := regResp1.UserID
 
@@ -180,7 +178,7 @@ func TestUser_GetByID(t *testing.T) {
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 
-	var loginResp1 authhandler.LoginResponse
+	var loginResp1 testcfg.LoginResp
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &loginResp1))
 	access1 := loginResp1.Tokens.AccessToken
 
@@ -201,7 +199,7 @@ func TestUser_GetByID(t *testing.T) {
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
 
-	var regResp2 authhandler.RegisterResponse
+	var regResp2 testcfg.RegisterResp
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &regResp2))
 
 	// Форсируем подтверждение email второго пользователя и логинимся.
@@ -213,7 +211,7 @@ func TestUser_GetByID(t *testing.T) {
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 
-	var loginResp2 authhandler.LoginResponse
+	var loginResp2 testcfg.LoginResp
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &loginResp2))
 	access2 := loginResp2.Tokens.AccessToken
 
@@ -224,7 +222,7 @@ func TestUser_GetByID(t *testing.T) {
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 
-	var publicProfile userhandler.PublicProfileResponse
+	var publicProfile testcfg.PublicProfileResp
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &publicProfile))
 	require.Equal(t, user1ID, publicProfile.ID)
 	require.Equal(t, "testuser", publicProfile.Username)
@@ -299,7 +297,7 @@ func TestUser_Restore_Account(t *testing.T) {
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 
-	var restoredResp authhandler.RestoreAccountResponse
+	var restoredResp testcfg.LoginResp
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &restoredResp))
 	require.Equal(t, userID, restoredResp.UserID)
 	require.Equal(t, "restore@example.com", restoredResp.Email)
@@ -315,7 +313,7 @@ func TestUser_Restore_Account(t *testing.T) {
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 
-	var profile userhandler.ProfileResponse
+	var profile testcfg.ProfileResp
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &profile))
 	require.Equal(t, userID, profile.ID)
 	require.Equal(t, "restore@example.com", profile.Email)
@@ -375,7 +373,7 @@ func TestUser_Restore_Account_EmailNotVerified(t *testing.T) {
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
 
-	var regResp authhandler.RegisterResponse
+	var regResp testcfg.RegisterResp
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &regResp))
 
 	// 2. Удаление аккаунта (без подтверждения email)
